@@ -1,6 +1,11 @@
-This folder corresponds to the paper - [Towards Self-Optimizing Electron Microscope: Robust Tuning of Aberration Coefficients via Physics-Aware Multi-Objective Bayesian Optimization](https://arxiv.org/abs/2601.18972)
+This folder corresponds to the paper:
+![alt text](final.png)
+[Towards Self-Optimizing Electron Microscope: Robust Tuning of Aberration Coefficients via Physics-Aware Multi-Objective Bayesian Optimization](https://arxiv.org/abs/2601.18972)
 
-Q1. How to setup Python environment - Please use the pyproject.toml in this repository
+
+
+Q1. How to setup Python environment? 
+- Please use the pyproject.toml in this repository
 - command : uv sync
 - Note : Setting up the environment for asyncroscopy can be tricky as the Autoscript part will need the the python wheels from Thermofisher -> Please watch this video for that part :
     - https://www.youtube.com/watch?v=EYPrCUtKUmI&t=1032s
