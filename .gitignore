@@ -224,3 +224,10 @@ AS_1.14_wheels/
 
 *.png
 *.npz
+
+# Ignore everything inside aberrations-BO
+/notebooks/aberrations-BO/*
+
+# But keep MOBO-paper-related
+!/notebooks/aberrations-BO/MOBO-paper-related/
+!/notebooks/aberrations-BO/MOBO-paper-related/**

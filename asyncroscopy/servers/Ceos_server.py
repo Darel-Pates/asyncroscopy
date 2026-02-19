@@ -38,7 +38,7 @@ class CeosProtocol(ExecutionProtocol):
     def __init__(self):
         super().__init__()
         self.host = "10.46.217.241"
-        self.port = 7072
+        self.port = 9092
         self._nextMessageID = 1
         self._pendingCommands = {}
 
@@ -74,10 +74,9 @@ class CeosProtocol(ExecutionProtocol):
                 if not chunk:
                     break
                 buffer += chunk
-
-        print("[Exec] Received netstring from CEOS:", buffer)
-        self.sendString(package_message(buffer))
-
+        msg = buffer.decode()
+        print("[Exec] Received netstring from CEOS:", msg)
+        self.sendString(package_message(msg))
 
 if __name__ == "__main__":
     port = 9003

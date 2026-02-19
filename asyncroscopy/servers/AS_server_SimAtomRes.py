@@ -142,9 +142,11 @@ class ASProtocol(ExecutionProtocol):
 
             # time.sleep(1)
             image = np.array(image, dtype=np.float32)
+            sim_im = np.array(sim_im, dtype=np.float32)
+
             # image = (np.random.rand(size, size) * 255).astype(np.uint8)
             self.factory.status = "Ready"
-            self.sendString(package_message(image))
+            self.sendString(package_message(sim_im))
 
 
     def get_stage(self, args=None):
