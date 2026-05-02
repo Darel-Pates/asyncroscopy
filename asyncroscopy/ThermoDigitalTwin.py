@@ -5,10 +5,8 @@ Useful for testing and development without requiring AutoScript hardware.
 """
 
 import json
-import time
-import math
-from typing import Optional
 from pathlib import Path
+
 
 import numpy as np
 import pyTEMlib.image_tools as it
@@ -16,8 +14,8 @@ import pyTEMlib.probe_tools as pt
 import tango
 from ase import Atoms
 from ase.build import bulk
-from tango import AttrWriteType, DevState
-from tango.server import Device, attribute, device_property
+from tango import AttrWriteType, DevState, DevEncoded
+from tango.server import Device, attribute, device_property, command
 
 from asyncroscopy.Microscope import Microscope
 from asyncroscopy.simulation import StemSim as dg # dg means datagenerator --> needs better naming -> using directly as used in twisted version for now
@@ -26,11 +24,16 @@ from asyncroscopy.simulation import StemSim as dg # dg means datagenerator --> n
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent  # removes "servers"
 
+
 class ThermoDigitalTwin(Microscope):
     """
     Persistent ASE-backed sample simulation with stage-coupled viewport rendering.
     """
 
+    # ------------------------------------------------------------------
+    # Device properties — configure in Tango DB per deployment
+    # ------------------------------------------------------------------
+    
     sample_seed = device_property(
         dtype=int,
         default_value=12345,
@@ -117,7 +120,6 @@ class ThermoDigitalTwin(Microscope):
             "eds": self.eds_device_address,
             "stage": self.stage_device_address,
             "scan": self.scan_device_address,
-            "corrector": self.corrector_device_address
         }
         for name, address in addresses.items():
             if not address:
@@ -187,7 +189,9 @@ class ThermoDigitalTwin(Microscope):
         g = np.exp(-(((xx + dx) ** 2 + (yy + dy) ** 2) / (2 * sigma**2)))
         m = np.max(g)
         return g / m if m > 0 else g
-
+    # ------------------------------------------------------------------
+    #  simulation helpers ----> Should be put in asyncroscopy/simulation later
+    # ------------------------------------------------------------------
     def _create_pseudo_potential(
         self,
         xtal: Atoms,
@@ -288,125 +292,6 @@ class ThermoDigitalTwin(Microscope):
         sample_z = float(self.sample_size_z) * 1e10
         if sample_xy <= 0.0 or sample_z <= 0.0:
             raise ValueError(
-                f"beam_pos values must be in [0.0, 1.0], got x={x}, y={y}"
-            )
-
-        self._beam_pos_x = x
-        self._beam_pos_y = y
-
-    # ------------------------------------------------------------------
-    # Commands
-    # ------------------------------------------------------------------
-
-    @command(dtype_out=DevEncoded)#In PyTango, DevEncoded is a special Tango data type designed to send binary data + a small description string together as a single return value.
-    def get_scanned_image_with_aberrations(self) -> tuple[str, bytes]:
-        """
-        Acquire a single STEM image from the named detector.
-
-        Parameters
-        ----------
-        detector_name:
-            Name of the detector, e.g. "haadf". Must match a key in
-            self._detector_proxies.
-
-        Returns
-        -------
-        DevEncoded = (json_metadata, raw_bytes)
-            json_metadata includes: shape, dtype, dwell_time, detector,
-            timestamp, and any other relevant metadata.
-            raw_bytes is the flat numpy array bytes; reshape using shape from metadata.
-        """
-        # check active detectors
-        scan = self._detector_proxies.get("scan")
-        corrector = self._detector_proxies.get("corrector")
-
-
-        # Read scan settings from the detector device
-        dwell_time=scan.dwell_time
-        imsize=scan.imsize
-        
-        # Read aberration setting from the corrector
-        ab = corrector.get_aberrations_coeff_sim()# is a json string
-        self.ab = json.loads(ab)
-
-        adorned_image = self._acquire_stem_image_aberrations(imsize, dwell_time, ['haadf'])
-
-        metadata = {
-            "detector": 'haadf',
-            "shape": [imsize, imsize],
-            "dtype": str(adorned_image.dtype),
-            "dwell_time": dwell_time,
-            "timestamp": time.time(),
-            # TODO: add metadata from adorned_image.metadata when using real AutoScript
-        }
-
-        return json.dumps(metadata), adorned_image.tobytes()
-
-
-    # ------------------------------------------------------------------
-    # Internal acquisition helpers
-    # ------------------------------------------------------------------
-    
-    def _acquire_stem_image_aberrations(self, imsize: int, dwell_time: float, detector_list: list) -> np.ndarray:
-        """
-        """
-        size = imsize
-        beam_current = 100 # pA
-        ab = self.ab
-        ab['acceleration_voltage'] = 60e3 # eV
-        fov = 96 # angstroms
-        ab['FOV'] = fov /12 # Angstroms
-        ab['convergence_angle'] = 30 # mrad
-        ab['wavelength'] = it.get_wavelength(ab['acceleration_voltage'])
-        cif_path = (
-            PROJECT_ROOT
-            / "data"
-            / "cif_files"
-            / "WS2_ortho.cif"
-        )
-        print("Reading CIF from:", cif_path)
-        xtal = read(cif_path)
-        xtal = xtal * (30, 20, 1)
-        positions = xtal.get_positions()[:, :2]
-        pixel_size = 0.106 # angstrom/pixel
-        frame = (0,fov,0,fov) # limits of the image in angstroms
-        potential = dg.create_pseudo_potential(xtal, pixel_size, sigma=1, bounds=frame, atom_frame=11)
-        probe = dg.get_probe(ab, potential)
-        image = dg.convolve_kernel(potential, probe)
-        noisy_image = dg.lowfreq_noise(image, noise_level=0.5, freq_scale=.04)
-
-        scan_time = dwell_time * size * size
-        counts = scan_time * (beam_current * 1e-12) / (1.602e-19)
-        sim_im = dg.poisson_noise(noisy_image, counts=counts)
-        # convert args dict
-
-        # time.sleep(1)
-        image = np.array(image, dtype=np.float32) 
-        sim_im = np.array(sim_im, dtype=np.float32)
-        print(sim_im.shape) # TODO: the simulation is independent of size and always returns - (905, 905) image -> need to check
-        return sim_im
-
-    def _acquire_stem_image(self, imsize: int, dwell_time: float, detector_list: list) -> np.ndarray:
-        """
-        Simulate a stem image of nanopartcles
-        For now, these params are hard-coded here.
-        Eventually, we will have a sample module (for metadata, but most useful for DigitalTwins)
-        """
-        size = imsize
-        self._imsize = imsize
-        fov = self._fov * 1e10  # angstroms
-        edge_crop = 20
-        beam_current = 1000 # pA?  unsure
-        blur_noise_level = float(0.1)
-        pixel_size  = fov / size
-
-        # ── Nanoparticle parameters
-        particle_radius   = 16.0      # Angstroms, mean radius
-        radius_std        = 2.0      # randomize size a bit
-        aspect_ratio      = 0.4      # z_radius = aspect_ratio * xy_radius (flat pancake)
-        min_separation    = 3.0      # minimum gap between particle surfaces (Angstroms)
-        n_particles       = 40       # how many particles to try to place
-        max_attempts      = 500      # attempts to place each particle without overlap
                 "sample_size_xy and sample_size_z must both be > 0."
             )
 
@@ -525,6 +410,9 @@ class ThermoDigitalTwin(Microscope):
         self._cached_pose_key = None
         self._update_view_cache(force=True)
 
+    # ------------------------------------------------------------------
+    # Attribute read methods
+    # ------------------------------------------------------------------
     def read_manufacturer(self) -> str:
         """Read method for the manufacturer attribute."""
         return self._manufacturer
@@ -541,6 +429,57 @@ class ThermoDigitalTwin(Microscope):
         self._beam_pos_x = float(x)
         self._beam_pos_y = float(y)
 
+
+    # ------------------------------------------------------------------
+    # Commands
+    # ------------------------------------------------------------------
+    
+    @command(dtype_out=DevEncoded)#In PyTango, DevEncoded is a special Tango data type designed to send binary data + a small description string together as a single return value.
+    def get_scanned_image_with_aberrations(self) -> tuple[str, bytes]:
+        """
+        Acquire a single STEM image from the named detector.
+
+        Parameters
+        ----------
+        detector_name:
+            Name of the detector, e.g. "haadf". Must match a key in
+            self._detector_proxies.
+
+        Returns
+        -------
+        DevEncoded = (json_metadata, raw_bytes)
+            json_metadata includes: shape, dtype, dwell_time, detector,
+            timestamp, and any other relevant metadata.
+            raw_bytes is the flat numpy array bytes; reshape using shape from metadata.
+        """
+        # check active detectors
+        scan = self._detector_proxies.get("scan")
+        corrector = self._detector_proxies.get("corrector")
+
+
+        # Read scan settings from the detector device
+        dwell_time=scan.dwell_time
+        imsize=scan.imsize
+        
+        # Read aberration setting from the corrector
+        ab = corrector.get_aberrations_coeff_sim()# is a json string
+        self.ab = json.loads(ab)
+
+        adorned_image = self._acquire_stem_image_aberrations(imsize, dwell_time, ['haadf'])
+
+        metadata = {
+            "detector": 'haadf',
+            "shape": [imsize, imsize],
+            "dtype": str(adorned_image.dtype),
+            "dwell_time": dwell_time,
+            "timestamp": time.time(),
+            # TODO: add metadata from adorned_image.metadata when using real AutoScript
+        }
+
+        return json.dumps(metadata), adorned_image.tobytes()
+    # ------------------------------------------------------------------
+    # Internal acquisition helpers
+    # ------------------------------------------------------------------
     def _acquire_stem_image(self, imsize: int, dwell_time: float, detector_list: list) -> np.ndarray:
         """Simulate STEM image acquisition using convolutions of the pseudo-potential and electron probe."""
         self._sync_stage_from_proxy()
@@ -584,6 +523,46 @@ class ThermoDigitalTwin(Microscope):
         noisy_image = self._poisson_noise(image, counts=counts, rng=rng)
         noisy_image += self._lowfreq_noise(noisy_image, noise_level=0.1, freq_scale=0.1, rng=rng) * blur_noise_level
         return np.clip(noisy_image, 0.0, 1.0).astype(np.float32)
+
+    
+    def _acquire_stem_image_aberrations(self, imsize: int, dwell_time: float, detector_list: list) -> np.ndarray:
+        """
+        """
+        size = imsize
+        beam_current = 100 # pA
+        ab = self.ab
+        ab['acceleration_voltage'] = 60e3 # eV
+        fov = 96 # angstroms
+        ab['FOV'] = fov /12 # Angstroms
+        ab['convergence_angle'] = 30 # mrad
+        ab['wavelength'] = it.get_wavelength(ab['acceleration_voltage'])
+        cif_path = (
+            PROJECT_ROOT
+            / "data"
+            / "cif_files"
+            / "WS2_ortho.cif"
+        )
+        print("Reading CIF from:", cif_path)
+        xtal = read(cif_path)
+        xtal = xtal * (30, 20, 1)
+        positions = xtal.get_positions()[:, :2]
+        pixel_size = 0.106 # angstrom/pixel
+        frame = (0,fov,0,fov) # limits of the image in angstroms
+        potential = dg.create_pseudo_potential(xtal, pixel_size, sigma=1, bounds=frame, atom_frame=11)
+        probe = dg.get_probe(ab, potential)
+        image = dg.convolve_kernel(potential, probe)
+        noisy_image = dg.lowfreq_noise(image, noise_level=0.5, freq_scale=.04)
+
+        scan_time = dwell_time * size * size
+        counts = scan_time * (beam_current * 1e-12) / (1.602e-19)
+        sim_im = dg.poisson_noise(noisy_image, counts=counts)
+        # convert args dict
+
+        # time.sleep(1)
+        image = np.array(image, dtype=np.float32) 
+        sim_im = np.array(sim_im, dtype=np.float32)
+        print(sim_im.shape) # TODO: the simulation is independent of size and always returns - (905, 905) image -> need to check
+        return sim_im
 
     def _acquire_stem_image_advanced(
         self,
