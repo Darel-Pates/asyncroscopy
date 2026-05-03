@@ -22,6 +22,7 @@ import json
 import time
 from typing import Optional
 
+
 from abc import abstractmethod, ABC, ABCMeta
 
 import numpy as np
@@ -49,6 +50,13 @@ class Microscope(Device, metaclass=CombinedMeta):
         doc="Tango device address for the SCAN settings device. "
             "DB mode: 'test/detector/scan' "
             "No-DB mode: 'tango://127.0.0.1:8888/test/nodb/scan#dbase=no'",
+    )
+    
+    corrector_device_address = device_property(
+        dtype=str,
+        doc="Tango device address for the aberration corrector settings device. "
+            "DB mode: 'test/hardware/corrector' "
+            "No-DB mode: 'tango://127.0.0.1:8888/test/nodb/corrector#dbase=no'",
     )
 
     eds_device_address = device_property(

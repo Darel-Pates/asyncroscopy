@@ -6,12 +6,13 @@ Useful for testing and development without requiring AutoScript hardware.
 
 import json
 from pathlib import Path
-
+import time
 
 import numpy as np
 import pyTEMlib.image_tools as it
 import pyTEMlib.probe_tools as pt
 import tango
+from ase.io import read
 from ase import Atoms
 from ase.build import bulk
 from tango import AttrWriteType, DevState, DevEncoded
@@ -120,6 +121,7 @@ class ThermoDigitalTwin(Microscope):
             "eds": self.eds_device_address,
             "stage": self.stage_device_address,
             "scan": self.scan_device_address,
+            "corrector": self.corrector_device_address
         }
         for name, address in addresses.items():
             if not address:

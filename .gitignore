@@ -214,3 +214,4 @@ llm-context/
 _build
 
 extra-notebooks-debug/
+tango_database.db
