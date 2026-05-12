@@ -24,9 +24,9 @@ export TANGO_HOST=localhost:11000
 uv run scripts/register_devices.py 
 - returns:
     - Connected: MacBook-Pro-649.local:11000
-    - registered: test/haadf/1
-    - registered: test/microscope/1
-    - property:   haadf_device_address = test/haadf/1
+    - registered: asyncroscopy/haadf/default
+    - registered: asyncroscopy/microscope/default
+    - property:   haadf_device_address = asyncroscopy/haadf/default
 
     Done!
 
@@ -42,12 +42,12 @@ uv run python -m asyncroscopy.ThermoMicroscope microscope_instance
 - returns:
     - True
         Client connecting to [localhost:9090]...
-        {'haadf': 'test/haadf/1', 'AdvancedAcquistion': None}
+        {'haadf': 'asyncroscopy/haadf/default', 'AdvancedAcquistion': None}
         Ready to accept request
 
 5) client side
 export TANGO_HOST=localhost:11000 
-DeviceProxy("test/haadf/1")
+DeviceProxy("asyncroscopy/haadf/default")
 """
 
 

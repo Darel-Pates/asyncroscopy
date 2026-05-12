@@ -38,7 +38,7 @@ def tango_ctx():
             "class": SCAN,
             "devices": [
                 {
-                    "name": "test/nodb/scan",
+                    "name": "asyncroscopy/scan/default",
                     "properties": {
                         # put SCAN defaults here if you want
                         # e.g. "dwell_time": 2e-6  (only if it's a device_property)
@@ -50,7 +50,7 @@ def tango_ctx():
             "class": EDS,
             "devices": [
                 {
-                    "name": "test/nodb/eds",
+                    "name": "asyncroscopy/eds/default",
                     "properties": {},
                 }
             ],
@@ -59,7 +59,7 @@ def tango_ctx():
             "class": STAGE,
             "devices": [
                 {
-                    "name": "test/nodb/stage",
+                    "name": "asyncroscopy/stage/default",
                     "properties": {},
                 }
             ],
@@ -68,11 +68,11 @@ def tango_ctx():
             "class": ThermoDigitalTwin,
             "devices": [
                 {
-                    "name": "test/nodb/twin",
+                    "name": "asyncroscopy/digitaltwin/default",
                     "properties": {
-                        "scan_device_address": "test/nodb/scan",
-                        "eds_device_address": "test/nodb/eds",
-                        "stage_device_address": "test/nodb/stage",
+                        "scan_device_address": "asyncroscopy/scan/default",
+                        "eds_device_address": "asyncroscopy/eds/default",
+                        "stage_device_address": "asyncroscopy/stage/default",
                     },
                 }
             ],
@@ -82,10 +82,10 @@ def tango_ctx():
             "class": ThermoMicroscope,
             "devices": [
                 {
-                    "name": "test/nodb/thermomicroscope",
+                    "name": "asyncroscopy/thermomicroscope/default",
                     "properties": {
                         "testing_mode_bool": True,
-                        "scan_device_address": "test/nodb/scan",
+                        "scan_device_address": "asyncroscopy/scan/default",
                     },
                 }
             ],
@@ -103,27 +103,27 @@ def tango_ctx():
 
 @pytest.fixture(scope="session")
 def scan_proxy(tango_ctx):
-    return tango.DeviceProxy(tango_ctx.get_device_access("test/nodb/scan"))
+    return tango.DeviceProxy(tango_ctx.get_device_access("asyncroscopy/scan/default"))
 
 
 @pytest.fixture(scope="session")
 def twin_proxy(tango_ctx):
-    return tango.DeviceProxy(tango_ctx.get_device_access("test/nodb/twin"))
+    return tango.DeviceProxy(tango_ctx.get_device_access("asyncroscopy/digitaltwin/default"))
 
 
 @pytest.fixture(scope="session")
 def eds_proxy(tango_ctx):
-    return tango.DeviceProxy(tango_ctx.get_device_access("test/nodb/eds"))
+    return tango.DeviceProxy(tango_ctx.get_device_access("asyncroscopy/eds/default"))
 
 
 @pytest.fixture(scope="session")
 def stage_proxy(tango_ctx):
-    return tango.DeviceProxy(tango_ctx.get_device_access("test/nodb/stage"))
+    return tango.DeviceProxy(tango_ctx.get_device_access("asyncroscopy/stage/default"))
 
 
 @pytest.fixture(scope="session")
 def thermo_proxy(tango_ctx):
-    return tango.DeviceProxy(tango_ctx.get_device_access("test/nodb/thermomicroscope"))
+    return tango.DeviceProxy(tango_ctx.get_device_access("asyncroscopy/thermomicroscope/default"))
 
 
 

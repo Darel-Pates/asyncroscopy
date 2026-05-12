@@ -21,7 +21,7 @@ so that the caller can parse it as needed.
 Client-side example::
 
     import json
-    proxy = tango.DeviceProxy("test/ceos/1")
+    proxy = tango.DeviceProxy("asyncroscopy/ceos/default")
 
     info        = json.loads(proxy.get_info())
     aberrations = json.loads(proxy.get_aberrations())

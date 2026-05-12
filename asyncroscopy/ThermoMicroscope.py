@@ -79,7 +79,7 @@ class ThermoMicroscope(Microscope):
     tiled_device_address = device_property(
         dtype=str,
         default_value="",
-        doc="Optional Tango device address for the Tiled device, e.g. 'test/tiled/1'.",
+        doc="Optional Tango device address for the Tiled device, e.g. 'asyncroscopy/tiled/default'.",
     )
 
     # ------------------------------------------------------------------

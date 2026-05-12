@@ -259,7 +259,7 @@ def main():
                 port_socket = None
 
             db = connect_database(host, port)
-            device_name = f"test/{class_name.lower()}/1"
+            device_name = f"asyncroscopy/{class_name.lower()}/default"
             server_name = f"{class_name}/{class_name.lower()}_instance"
 
             # Setup main device
@@ -269,7 +269,7 @@ def main():
             sub_devices = get_required_subdevices(class_name)
             for sub in sub_devices:
                 sub_classname = sub["class"]
-                sub_device = f"test/{sub['prefix']}/1"
+                sub_device = f"asyncroscopy/{sub['prefix']}/default"
                 sub_server = f"{sub_classname}/{sub['prefix']}_instance"
 
                 # Register the sub-device and link it to the main device

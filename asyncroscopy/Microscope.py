@@ -39,36 +39,36 @@ class Microscope(Device, metaclass=CombinedMeta):
     scan_device_address = device_property(
         dtype=str,
         doc="Tango device address for the SCAN settings device. "
-            "DB mode: 'test/detector/scan' "
-            "No-DB mode: 'tango://127.0.0.1:8888/test/nodb/scan#dbase=no'",
+            "DB mode: 'asyncroscopy/scan/default' "
+            "No-DB mode: 'tango://127.0.0.1:8888/asyncroscopy/scan/default#dbase=no'",
     )
 
     eds_device_address = device_property(
         dtype=str,
         doc="Tango device address for the EDS settings device. "
-            "DB mode: 'test/detector/eds' "
-            "No-DB mode: 'tango://127.0.0.1:8887/test/nodb/haadf#dbase=no'",
+            "DB mode: 'asyncroscopy/eds/default' "
+            "No-DB mode: 'tango://127.0.0.1:8887/asyncroscopy/haadf/default#dbase=no'",
     )
 
     stage_device_address = device_property(
         dtype=str,
         doc="Tango device address for the STAGE settings device. "
-            "DB mode: 'test/hardware/stage' "
-            "No-DB mode: 'tango://127.0.0.1:8888/test/nodb/stage#dbase=no'",
+            "DB mode: 'asyncroscopy/stage/default' "
+            "No-DB mode: 'tango://127.0.0.1:8888/asyncroscopy/stage/default#dbase=no'",
     )
 
     camera_device_address = device_property(
         dtype=str,
         doc="Tango device address for the CAMERA settings . "
-            "DB mode: 'test/detector/camera' "
-            "No-DB mode: 'tango://127.0.0.1:8888/test/nodb/camera#dbase=no'",
+            "DB mode: 'asyncroscopy/camera/default' "
+            "No-DB mode: 'tango://127.0.0.1:8888/asyncroscopy/camera/default#dbase=no'",
     )
     testing_mode_bool = device_property(dtype=bool, 
                                         default_value=False,
                                         doc="When True - used for running tests, passed in conftest.py")
 
     # Add further detector device_property entries here as detectors are added
-    # eels_device_address  = device_property(dtype=str, default_value="test/detector/eels")
+    # eels_device_address  = device_property(dtype=str, default_value="asyncroscopy/eels/default")
 
     # ------------------------------------------------------------------
     # Attributes

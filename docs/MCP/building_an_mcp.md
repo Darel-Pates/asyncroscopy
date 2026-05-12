@@ -341,8 +341,8 @@ class CoordinatedServer(MCPServer):
     @tool()
     def acquire_multimodal(self, exposure_ms: int) -> dict:
         """Acquire STEM + EDS simultaneously."""
-        stem_dev = tango.DeviceProxy("test/microscope/stem")
-        eds_dev = tango.DeviceProxy("test/detector/eds")
+        stem_dev = tango.DeviceProxy("asyncroscopy/microscope/default")
+        eds_dev = tango.DeviceProxy("asyncroscopy/eds/default")
         
         stem_data = stem_dev.command_inout("AcquireImage", exposure_ms)
         eds_data = eds_dev.command_inout("Acquire", exposure_ms)

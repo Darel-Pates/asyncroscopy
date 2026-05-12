@@ -218,7 +218,7 @@ class TestMCPServerDBMode:
 
                 # Register and start Digital Twin
                 instance = "test_instance"
-                device_name = "test/digitaltwin/1"
+                device_name = "asyncroscopy/digitaltwin/default"
                 self.register_digital_twin(host, port, instance, device_name)
 
                 try:

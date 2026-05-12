@@ -20,31 +20,31 @@ import tango
 # ── Settings ──────────────────────────────────────────────────
 SCAN_SERVER  = "SCAN/scan_instance" 
 SCAN_CLASS   = "SCAN" 
-SCAN_DEVICE  = "test/scan/1"
+SCAN_DEVICE  = "asyncroscopy/scan/default"
 
 CAMERA_SERVER  = "CAMERA/camera_instance" 
 CAMERA_CLASS   = "CAMERA" 
-CAMERA_DEVICE  = "test/camera/1"
+CAMERA_DEVICE  = "asyncroscopy/camera/default"
 
 EDS_SERVER  = "EDS/eds_instance" 
 EDS_CLASS   = "EDS" 
-EDS_DEVICE  = "test/eds/1"
+EDS_DEVICE  = "asyncroscopy/eds/default"
 
 STAGE_SERVER  = "STAGE/stage_instance" 
 STAGE_CLASS   = "STAGE" 
-STAGE_DEVICE  = "test/stage/1"
+STAGE_DEVICE  = "asyncroscopy/stage/default"
 
 CORRECTOR_SERVER  = "CORRECTOR/corrector_instance" 
 CORRECTOR_CLASS   = "CORRECTOR" 
-CORRECTOR_DEVICE  = "test/corrector/1"
+CORRECTOR_DEVICE  = "asyncroscopy/corrector/default"
 
 TILED_SERVER  = "Tiled/tiled_instance"
 TILED_CLASS   = "Tiled"
-TILED_DEVICE  = "test/tiled/1"
+TILED_DEVICE  = "asyncroscopy/tiled/default"
 
 MICRO_SERVER  = "ThermoMicroscope/microscope_instance"
 MICRO_CLASS   = "ThermoMicroscope"
-MICRO_DEVICE  = "test/microscope/1"
+MICRO_DEVICE  = "asyncroscopy/microscope/default"
 # ──────────────────────────────────────────────────────────────
 
 

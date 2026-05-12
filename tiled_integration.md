@@ -28,7 +28,7 @@ import json
 import tango
 from getpass import getpass
 
-tiled = tango.DeviceProxy("test/tiled/1")
+tiled = tango.DeviceProxy("asyncroscopy/tiled/default")
 tiled.host = "10.46.217.241"
 tiled.port = 9091
 tiled.save_path = "/path/served/by/tiled"

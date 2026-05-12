@@ -4,7 +4,7 @@
 1. Copy `asyncroscopy/detectors/HAADF.py` to `asyncroscopy/detectors/NEWDET.py` and adjust the attributes for that detector's settings.
 2. Add a `device_property` in Microscope.py:
    ```python
-   newdet_device_address = device_property(dtype=str, default_value="test/detector/newdet")
+   newdet_device_address = device_property(dtype=str, default_value="asyncroscopy/newdet/default")
    ```
 3. Register it in `_connect_detector_proxies()` - see step 4 in  [modify_thermo_microscope.md](../Microscopy/modify_thermo_microscope.md)
    ```python
