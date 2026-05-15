@@ -46,6 +46,7 @@ Extends Microscope with multi-detector orchestration:
 
 Individual detector devices:
 - `CAMERA.py` - Generic camera control
+- `FLUCAM.py` - Flucam / SmartCam camera control
 - `EDS.py` - Energy dispersive X-ray spectroscopy
 - `EELS.py` - Electron energy loss spectroscopy
 

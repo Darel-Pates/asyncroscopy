@@ -1,66 +1,129 @@
 # Asyncroscopy Block Diagram
 
-This diagram shows how a user command moves through Asyncroscopy to real microscope hardware, and how acquisition data returns to the user interface.
+This diagram shows the main Asyncroscopy components at a high level: user interfaces, servers, Tango device servers, and real physical devices.
 
 ```mermaid
-flowchart LR
-    UI["User Interface<br/>LLM agent<br/>Jupyter notebook<br/>Python script"]
+graph LR
+%% Nodes
+UI("User Interfaces"):::green
+LLM("LLM Agent"):::green
+Notebook("Jupyter Notebook"):::green
+Script("Python Script"):::green
 
-    MCP["MCPServer / FastMCP<br/>exposes Tango commands<br/>as MCP tools"]
+MCP("MCP Server"):::orange
+Tango("Tango Database Server"):::orange
+TiledServer("Tiled Server"):::orange
 
-    DIRECT["Direct PyTango Client<br/>DeviceProxy calls"]
+Thermo("ThermoMicroscope<br>main device server"):::blue
+Twin("ThermoDigitalTwin<br>simulation device server"):::purple
 
-    TANGO["PyTango Control Plane<br/>Tango Database<br/>DeviceProxy routing<br/>device properties"]
+Scan("SCAN<br>settings device server"):::blue
+Camera("CAMERA<br>settings device server"):::blue
+Flucam("FLUCAM<br>settings device server"):::blue
+Eds("EDS<br>settings device server"):::blue
+StageServer("STAGE<br>state device server"):::blue
+CorrectorServer("CORRECTOR<br>settings device server"):::blue
+TiledDevice("Tiled<br>data device server"):::blue
 
-    MICRO["ThermoMicroscope Device<br/>orchestrates commands<br/>reads settings<br/>calls hardware API"]
+AutoScript("AutoScript<br>microscope control server"):::pink
+Microscope("Real Thermo Fisher<br>microscope"):::yellow
+PhysicalStage("Physical Stage"):::yellow
+PhysicalDetectors("Physical Detectors"):::yellow
+PhysicalCorrector("Physical Corrector"):::yellow
 
-    SCAN["SCAN Device<br/>resolution<br/>dwell time<br/>scan region"]
-    CAM["CAMERA Device<br/>exposure<br/>image size<br/>readout area"]
-    EDS["EDS Device<br/>spectrum settings"]
-    STAGE["STAGE Device<br/>x, y, z<br/>alpha, beta"]
-    CORR["CORRECTOR Device<br/>CEOS / aberrations"]
+%% Stacks
+subgraph UserStack["User-facing entry points"]
+direction TB
+UI
+LLM
+Notebook
+Script
+end
 
-    AS["AutoScript TEM Client<br/>microscope PC API bridge"]
+subgraph CoreStack["Main Asyncroscopy devices"]
+direction TB
+Thermo
+Twin
+end
 
-    HW["Real Microscope Hardware<br/>Thermo Fisher STEM/TEM<br/>beam, stage, detectors"]
+subgraph SupportStack["Supporting device servers"]
+direction TB
+Scan
+Camera
+Flucam
+Eds
+StageServer
+CorrectorServer
+TiledDevice
+AutoScript
+end
 
-    SAVE["Acquisition Save Directory<br/>TIFF / files / metadata"]
+subgraph PhysicalStack["Real physical microscope"]
+direction TB
+Microscope
+PhysicalStage
+PhysicalDetectors
+PhysicalCorrector
+end
 
-    TILED_SERVER["Tiled Server<br/>serves acquisition files"]
+%% Edges
+UI --> LLM
+UI --> Notebook
+UI --> Script
 
-    TILED_DEV["Tiled Tango Device<br/>get_data()<br/>get_recent()<br/>resolve saved path"]
+LLM --> MCP
+MCP --> Tango
+Notebook --> Tango
+Script --> Tango
 
-    TWIN["ThermoDigitalTwin Device<br/>same Tango command interface<br/>synthetic sample<br/>simulated image/spectrum"]
+Tango --> Thermo
+Tango --> Twin
 
-    UI -->|"command / request"| MCP
-    UI -->|"Python DeviceProxy command"| DIRECT
+Tango --> Scan
+Tango --> Camera
+Tango --> Flucam
+Tango --> Eds
+Tango --> StageServer
+Tango --> CorrectorServer
+Tango --> TiledDevice
 
-    MCP -->|"MCP tool invokes Tango command"| TANGO
-    DIRECT -->|"DeviceProxy command"| TANGO
+Thermo --> Scan
+Thermo --> Camera
+Thermo --> Flucam
+Thermo --> Eds
+Thermo --> StageServer
+Thermo --> CorrectorServer
 
-    TANGO -->|"route to exported device"| MICRO
-    TANGO -. "same interface for testing" .-> TWIN
+Thermo --> AutoScript
+AutoScript --> Microscope
+Microscope --> PhysicalStage
+Microscope --> PhysicalDetectors
+Microscope --> PhysicalCorrector
 
-    MICRO -->|"read settings / move state"| SCAN
-    MICRO -->|"read settings"| CAM
-    MICRO -->|"read settings"| EDS
-    MICRO -->|"move / read stage"| STAGE
-    MICRO -->|"read / set aberrations"| CORR
+PhysicalStage --> Thermo
+PhysicalDetectors --> Thermo
+PhysicalCorrector --> Thermo
 
-    MICRO -->|"execute acquisition or hardware action"| AS
-    AS -->|"AutoScript command"| HW
+Thermo --> TiledServer
+TiledServer --> TiledDevice
+TiledDevice --> Tango
+Tango --> MCP
+Tango --> Notebook
+Tango --> Script
+MCP --> LLM
+LLM --> UI
+Notebook --> UI
+Script --> UI
 
-    HW -. "image / spectrum / microscope state" .-> AS
-    AS -. "adorned acquisition object + metadata" .-> MICRO
+Twin --> Notebook
+Twin --> Script
+Twin --> MCP
 
-    MICRO -->|"save real acquisition"| SAVE
-    SAVE --> TILED_SERVER
-    TILED_SERVER --> TILED_DEV
-    TILED_DEV -. "arrays + metadata + recent files" .-> UI
-
-    MICRO -. "JSON / DevEncoded / base64 / file path" .-> TANGO
-    TANGO -. "result" .-> MCP
-    MCP -. "tool result" .-> UI
-
-    TWIN -. "simulated image / spectrum / metadata" .-> TANGO
+    %% Styling
+    classDef green fill:#B2DFDB,stroke:#00897B,stroke-width:2px;
+    classDef orange fill:#FFE0B2,stroke:#FB8C00,stroke-width:2px;
+    classDef blue fill:#BBDEFB,stroke:#1976D2,stroke-width:2px;
+    classDef yellow fill:#FFF9C4,stroke:#FBC02D,stroke-width:2px;
+    classDef pink fill:#F8BBD0,stroke:#C2185B,stroke-width:2px;
+    classDef purple fill:#E1BEE7,stroke:#8E24AA,stroke-width:2px;           
 ```
