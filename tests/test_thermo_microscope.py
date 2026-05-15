@@ -78,6 +78,28 @@ class TestThermoMicroscope:
             }
         ]
 
+    def test_flucam_settings_propagate_into_acquisition(
+        self,
+        thermo_proxy: tango.DeviceProxy,
+        flucam_proxy: tango.DeviceProxy,
+        patched_camera_path_acquisition: list[dict],
+    ) -> None:
+        flucam_proxy.exposure_time = 0.5
+        flucam_proxy.imsize = 1024
+        flucam_proxy.readout_area = "Full"
+
+        saved_path = thermo_proxy.get_flucam_image()
+
+        assert Path(saved_path).read_bytes() == b"fake-camera-tiff"
+        assert patched_camera_path_acquisition == [
+            {
+                "imsize": 1024,
+                "exposure_time": pytest.approx(0.5),
+                "detector": "Flucam",
+                "readout_area": "Full",
+            }
+        ]
+
     def test_tiled_acquisition_config_uses_tiled_device_save_path(
         self,
         thermo_proxy: tango.DeviceProxy,

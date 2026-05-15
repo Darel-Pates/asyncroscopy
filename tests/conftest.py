@@ -19,6 +19,7 @@ from tango.test_context import MultiDeviceTestContext
 # Import device classes to test
 from asyncroscopy.detectors.CAMERA import CAMERA
 from asyncroscopy.detectors.EDS import EDS
+from asyncroscopy.detectors.FLUCAM import FLUCAM
 from asyncroscopy.hardware.SCAN import SCAN
 from asyncroscopy.hardware.STAGE import STAGE
 from asyncroscopy.ThermoDigitalTwin import ThermoDigitalTwin
@@ -77,6 +78,15 @@ def tango_ctx(tiled_save_dir):
             ],
         },
         {
+            "class": FLUCAM,
+            "devices": [
+                {
+                    "name": "asyncroscopy/flucam/default",
+                    "properties": {},
+                }
+            ],
+        },
+        {
             "class": STAGE,
             "devices": [
                 {
@@ -104,6 +114,7 @@ def tango_ctx(tiled_save_dir):
                         "eds_device_address": "asyncroscopy/eds/default",
                         "stage_device_address": "asyncroscopy/stage/default",
                         "camera_device_address": "asyncroscopy/camera/default",
+                        "flucam_device_address": "asyncroscopy/flucam/default",
                     },
                 }
             ],
@@ -118,6 +129,7 @@ def tango_ctx(tiled_save_dir):
                         "testing_mode_bool": True,
                         "scan_device_address": "asyncroscopy/scan/default",
                         "camera_device_address": "asyncroscopy/camera/default",
+                        "flucam_device_address": "asyncroscopy/flucam/default",
                         "eds_device_address": "asyncroscopy/eds/default",
                         "stage_device_address": "asyncroscopy/stage/default",
                         "tiled_device_address": "asyncroscopy/tiled/default",
@@ -155,6 +167,11 @@ def eds_proxy(tango_ctx):
 @pytest.fixture(scope="session")
 def camera_proxy(tango_ctx):
     return tango.DeviceProxy(tango_ctx.get_device_access("asyncroscopy/camera/default"))
+
+
+@pytest.fixture(scope="session")
+def flucam_proxy(tango_ctx):
+    return tango.DeviceProxy(tango_ctx.get_device_access("asyncroscopy/flucam/default"))
 
 
 @pytest.fixture(scope="session")
