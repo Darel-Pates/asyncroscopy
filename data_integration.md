@@ -1,11 +1,11 @@
-# Tiled acquisition workflow
+# DATA acquisition workflow
 
 See more at https://github.com/bluesky/tiled.
 
 `ThermoMicroscope` now saves real AutoScript acquisitions on the microscope
-side and returns a JSON descriptor string through Tango. `asyncroscopy/Tiled.py`
-is the notebook-facing Tango device for reading those descriptors back from the
-Tiled server.
+side and returns a JSON descriptor string through Tango. `asyncroscopy/software/DATA.py`
+is the Tango data device for reading those descriptors back through the Tiled
+HTTP server.
 
 The preferred save format is `.emd`:
 
@@ -19,21 +19,21 @@ the format supported by `AdornedImage.save()` that preserves metadata.
 
 ## Notebook setup
 
-Connect to the Tiled Tango device once at the beginning of a workflow. The
-`save_path` directory should be visible to the Tiled server, and the microscope
-device should have `tiled_device_address` set to this Tango device.
+Connect to the DATA Tango device once at the beginning of a workflow. The
+`save_path` directory should be visible to the Tiled HTTP server, and the
+microscope device should have `data_device_address` set to this Tango device.
 
 ```python
 import json
 import tango
 from getpass import getpass
 
-tiled = tango.DeviceProxy("asyncroscopy/tiled/default")
-tiled.host = "10.46.217.241"
-tiled.port = 9091
-tiled.save_path = "/path/served/by/tiled"
-tiled.root_path = ""  # optional path prefix inside Tiled
-tiled.set_api_key(getpass("Enter your Tiled API key: "))
+data = tango.DeviceProxy("asyncroscopy/data/default")
+data.host = "10.46.217.241"
+data.port = 9091
+data.save_path = "/path/served/by/tiled"
+data.root_path = ""
+data.set_api_key(getpass("Enter your Tiled API key: "))
 ```
 
 Acquire as usual, but treat the return value as a descriptor:
@@ -42,15 +42,25 @@ Acquire as usual, but treat the return value as a descriptor:
 descriptor = mic.get_scanned_image()
 ```
 
-Use the Tiled device to inspect recent files or resolve data through Tiled:
+Use the DATA device to inspect recent files or resolve data through Tiled:
 
 ```python
-recent = json.loads(tiled.get_recent())
-data = json.loads(tiled.get_data(descriptor))
+recent = json.loads(data.get_recent())
+array = json.loads(data.get_data(descriptor))
 ```
 
 The descriptor includes both extension-stripped and extension-preserving Tiled
 path candidates because Tiled directory adapters can be configured either way.
+
+## Server Roles
+
+There are two data-related servers:
+
+- `asyncroscopy/data/default` is the DATA Tango device server. It belongs to asyncroscopy and bridges notebooks or microscope devices to Tiled.
+- `http://10.46.217.241:9091` is the Tiled HTTP data server. It indexes and serves files.
+
+The DATA device is started with the other Tango devices. The Tiled HTTP server
+is started separately and must already be reachable.
 
 ## Direct Tiled access
 

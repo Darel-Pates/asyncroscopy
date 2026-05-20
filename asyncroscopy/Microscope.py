@@ -7,7 +7,7 @@ so that each detector device is the single source of truth for its own params.
 Return convention for image commands
 -------------------------------------
 Image commands return a string. Hardware-backed microscopes should save the
-native adorned object on disk and return the saved path for Tiled to serve.
+native adorned object on disk and return the saved path for the Tiled server.
 """
 
 import json
@@ -145,7 +145,7 @@ class Microscope(Device, metaclass=CombinedMeta):
 
     @command(dtype_in=str, dtype_out=str)
     def configure_tiled_acquisition(self, config_json: str) -> str:
-        """Configure where acquisitions are saved before Tiled serves them."""
+        """Configure where acquisitions are saved before the Tiled server serves them."""
         return self._configure_tiled_acquisition(config_json)
 
     @command(dtype_out=str)

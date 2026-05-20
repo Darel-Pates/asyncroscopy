@@ -42,9 +42,9 @@ CORRECTOR_SERVER  = "CORRECTOR/corrector_instance"
 CORRECTOR_CLASS   = "CORRECTOR" 
 CORRECTOR_DEVICE  = "asyncroscopy/corrector/default"
 
-TILED_SERVER  = "Tiled/tiled_instance"
-TILED_CLASS   = "Tiled"
-TILED_DEVICE  = "asyncroscopy/tiled/default"
+DATA_SERVER  = "DATA/data_instance"
+DATA_CLASS   = "DATA"
+DATA_DEVICE  = "asyncroscopy/data/default"
 
 MICRO_SERVER  = "ThermoMicroscope/microscope_instance"
 MICRO_CLASS   = "ThermoMicroscope"
@@ -71,7 +71,7 @@ def main():
     add_device(db, EDS_SERVER, EDS_CLASS, EDS_DEVICE)
     add_device(db, STAGE_SERVER, STAGE_CLASS, STAGE_DEVICE)
     add_device(db, CORRECTOR_SERVER, CORRECTOR_CLASS, CORRECTOR_DEVICE)
-    add_device(db, TILED_SERVER, TILED_CLASS, TILED_DEVICE)
+    add_device(db, DATA_SERVER, DATA_CLASS, DATA_DEVICE)
     add_device(db, MICRO_SERVER, MICRO_CLASS, MICRO_DEVICE)
 
     db.put_device_property(MICRO_DEVICE, {"scan_device_address": [SCAN_DEVICE]})
@@ -80,7 +80,7 @@ def main():
     db.put_device_property(MICRO_DEVICE, {"eds_device_address": [EDS_DEVICE]})
     db.put_device_property(MICRO_DEVICE, {"stage_device_address": [STAGE_DEVICE]})
     db.put_device_property(MICRO_DEVICE, {"corrector_device_address": [CORRECTOR_DEVICE]})
-    db.put_device_property(MICRO_DEVICE, {"tiled_device_address": [TILED_DEVICE]})
+    db.put_device_property(MICRO_DEVICE, {"data_device_address": [DATA_DEVICE]})
 
     print(f"  property:   scan_device_address = {SCAN_DEVICE}")
     print(f"  property:   camera_device_address = {CAMERA_DEVICE}")
@@ -88,7 +88,7 @@ def main():
     print(f"  property:   eds_device_address = {EDS_DEVICE}")
     print(f"  property:   stage_device_address = {STAGE_DEVICE}")
     print(f"  property:   corrector_device_address = {CORRECTOR_DEVICE}")
-    print(f"  property:   tiled_device_address = {TILED_DEVICE}")
+    print(f"  property:   data_device_address = {DATA_DEVICE}")
 
     print("\nDone!")
 

@@ -147,6 +147,7 @@ def get_class_from_name(class_name: str):
     """Dynamically find a Tango Device class in the asyncroscopy package."""
     module_paths_to_try = [
         f"asyncroscopy.{class_name}",
+        f"asyncroscopy.software.{class_name}",
         f"asyncroscopy.hardware.{class_name}",
         f"asyncroscopy.detectors.{class_name}"
     ]
@@ -178,7 +179,7 @@ def get_required_subdevices(class_name: str) -> list[dict[str, str]]:
             prop = getattr(cls, attr_name)
             if isinstance(prop, device_property):
                 prefix = attr_name.split("_device_address")[0]
-                sub_class = "Tiled" if prefix.lower() == "tiled" else prefix.upper()
+                sub_class = prefix.upper()
                 sub_devices.append({
                     "class": sub_class,
                     "attr_name": attr_name,

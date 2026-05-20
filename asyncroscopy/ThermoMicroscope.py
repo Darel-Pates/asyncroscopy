@@ -13,7 +13,7 @@ and falls back to simulated acquisition. To enable real hardware:
 Return convention for real image commands
 -----------------------------------------
 Real AutoScript image commands save the adorned object on disk and return the
-saved file path. The Tiled device can read that path.
+saved file path. The DATA device can read that path through the Tiled server.
 """
 
 import math
@@ -26,7 +26,7 @@ from tango import AttrWriteType, DevState
 from tango.server import attribute, device_property
 
 from asyncroscopy.Microscope import Microscope
-from asyncroscopy.tiled_helpers import (
+from asyncroscopy.software.DATA import (
     DEFAULT_ACQUISITION_DIR,
     acquisition_config,
     save_adorned_acquisition,
@@ -69,17 +69,17 @@ class ThermoMicroscope(Microscope):
     acquisition_save_directory = device_property(
         dtype=str,
         default_value=DEFAULT_ACQUISITION_DIR,
-        doc="Directory where AutoScript acquisitions are saved before Tiled serves them.",
+        doc="Directory where AutoScript acquisitions are saved before the Tiled server serves them.",
     )
     acquisition_file_format = device_property(
         dtype=str,
         default_value="tiff",
         doc="Acquisition file format. TIFF preserves AutoScript image metadata.",
     )
-    tiled_device_address = device_property(
+    data_device_address = device_property(
         dtype=str,
         default_value="",
-        doc="Optional Tango device address for the Tiled device, e.g. 'asyncroscopy/tiled/default'.",
+        doc="Optional Tango device address for the DATA device, e.g. 'asyncroscopy/data/default'.",
     )
 
     # ------------------------------------------------------------------
@@ -128,7 +128,7 @@ class ThermoMicroscope(Microscope):
             "scan": self.scan_device_address,
             "camera": self.camera_device_address,
             "flucam": self.flucam_device_address,
-            "tiled": self.tiled_device_address,
+            "data": self.data_device_address,
         }
         for name, address in addresses.items():
             if not address:   # <-- minimal fix
@@ -151,7 +151,7 @@ class ThermoMicroscope(Microscope):
 
     def _configure_tiled_acquisition(self, config_json: str) -> str:
         """
-        Configure where acquisitions are saved before Tiled serves them.
+        Configure where acquisitions are saved before the Tiled server serves them.
 
         Pass JSON with any of: save_directory, file_format.
         Returns the complete active config as JSON.
@@ -166,7 +166,7 @@ class ThermoMicroscope(Microscope):
         return json.dumps(self._tiled_acquisition_config)
 
     def _get_tiled_acquisition_config(self) -> str:
-        """Return the active Tiled acquisition config as JSON."""
+        """Return the active DATA acquisition config as JSON."""
         return json.dumps(self._ensure_tiled_acquisition_config())
 
     # ------------------------------------------------------------------
@@ -263,10 +263,10 @@ class ThermoMicroscope(Microscope):
         )
 
     def _ensure_tiled_acquisition_config(self) -> dict[str, str]:
-        tiled_proxy = self._detector_proxies.get("tiled")
-        if tiled_proxy is not None:
+        data_proxy = self._detector_proxies.get("data")
+        if data_proxy is not None:
             self._tiled_acquisition_config = acquisition_config(
-                save_directory=tiled_proxy.save_path,
+                save_directory=data_proxy.save_path,
                 file_format=self.acquisition_file_format,
             )
             return self._tiled_acquisition_config

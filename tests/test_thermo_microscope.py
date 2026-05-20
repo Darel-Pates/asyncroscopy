@@ -100,17 +100,17 @@ class TestThermoMicroscope:
             }
         ]
 
-    def test_tiled_acquisition_config_uses_tiled_device_save_path(
+    def test_tiled_acquisition_config_uses_data_device_save_path(
         self,
         thermo_proxy: tango.DeviceProxy,
-        tiled_proxy: tango.DeviceProxy,
-        tiled_save_dir,
+        data_proxy: tango.DeviceProxy,
+        data_save_dir,
     ) -> None:
-        tiled_proxy.save_path = str(tiled_save_dir)
+        data_proxy.save_path = str(data_save_dir)
 
         config = json.loads(thermo_proxy.get_tiled_acquisition_config())
 
-        assert config["save_directory"] == str(tiled_save_dir)
+        assert config["save_directory"] == str(data_save_dir)
         assert config["file_format"] == "tiff"
 
     def test_unknown_detector_raises(self, thermo_proxy: tango.DeviceProxy) -> None:

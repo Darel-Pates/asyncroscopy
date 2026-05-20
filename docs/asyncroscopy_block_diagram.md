@@ -12,7 +12,7 @@ Script("Python Script"):::green
 
 MCP("MCP Server"):::orange
 Tango("Tango Database Server"):::orange
-TiledServer("Tiled Server"):::orange
+TiledServer("Tiled HTTP<br>data server"):::orange
 
 Thermo("ThermoMicroscope<br>main device server"):::blue
 Twin("ThermoDigitalTwin<br>simulation device server"):::purple
@@ -23,7 +23,7 @@ Flucam("FLUCAM<br>settings device server"):::blue
 Eds("EDS<br>settings device server"):::blue
 StageServer("STAGE<br>state device server"):::blue
 CorrectorServer("CORRECTOR<br>settings device server"):::blue
-TiledDevice("Tiled<br>data device server"):::blue
+DataDevice("DATA<br>Tango data device server"):::blue
 
 AutoScript("AutoScript<br>microscope control server"):::pink
 Microscope("Real Thermo Fisher<br>microscope"):::yellow
@@ -54,7 +54,7 @@ Flucam
 Eds
 StageServer
 CorrectorServer
-TiledDevice
+DataDevice
 AutoScript
 end
 
@@ -85,7 +85,7 @@ Tango --> Flucam
 Tango --> Eds
 Tango --> StageServer
 Tango --> CorrectorServer
-Tango --> TiledDevice
+Tango --> DataDevice
 
 Thermo --> Scan
 Thermo --> Camera
@@ -105,8 +105,8 @@ PhysicalDetectors --> Thermo
 PhysicalCorrector --> Thermo
 
 Thermo --> TiledServer
-TiledServer --> TiledDevice
-TiledDevice --> Tango
+DataDevice --> TiledServer
+DataDevice --> Tango
 Tango --> MCP
 Tango --> Notebook
 Tango --> Script

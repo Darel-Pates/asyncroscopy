@@ -141,16 +141,16 @@ def start_device_server(module: str, instance: str, env: dict[str, str]) -> Mana
     return ManagedProcess(module, proc)
 
 
-def test_can_start_scan_tiled_and_microscope_servers(tango_database, tmp_path) -> None:
+def test_can_start_scan_data_and_microscope_servers(tango_database, tmp_path) -> None:
     host, port, env = tango_database
     db = tango.Database(host, port)
 
     scan_device = "asyncroscopy/scan/default"
-    tiled_device = "asyncroscopy/tiled/default"
+    data_device = "asyncroscopy/data/default"
     microscope_device = "asyncroscopy/microscope/default"
 
     add_device(db, "SCAN/scan_instance", "SCAN", scan_device)
-    add_device(db, "Tiled/tiled_instance", "Tiled", tiled_device)
+    add_device(db, "DATA/data_instance", "DATA", data_device)
     add_device(db, "ThermoMicroscope/microscope_instance", "ThermoMicroscope", microscope_device)
     db.put_device_property(
         microscope_device,
@@ -161,28 +161,28 @@ def test_can_start_scan_tiled_and_microscope_servers(tango_database, tmp_path) -
             "flucam_device_address": [""],
             "eds_device_address": [""],
             "stage_device_address": [""],
-            "tiled_device_address": [tiled_device],
+            "data_device_address": [data_device],
         },
     )
 
     managed = [
         start_device_server("asyncroscopy.hardware.SCAN", "scan_instance", env),
-        start_device_server("asyncroscopy.Tiled", "tiled_instance", env),
+        start_device_server("asyncroscopy.software.DATA", "data_instance", env),
         start_device_server("asyncroscopy.ThermoMicroscope", "microscope_instance", env),
     ]
 
     try:
-        for device in [scan_device, tiled_device, microscope_device]:
+        for device in [scan_device, data_device, microscope_device]:
             wait_for_device(host, port, device, timeout=20)
 
         scan = tango.DeviceProxy(device_url(host, port, scan_device))
-        tiled = tango.DeviceProxy(device_url(host, port, tiled_device))
+        data = tango.DeviceProxy(device_url(host, port, data_device))
         microscope = tango.DeviceProxy(device_url(host, port, microscope_device))
 
-        tiled.save_path = str(tmp_path)
+        data.save_path = str(tmp_path)
 
         assert scan.state() == tango.DevState.ON
-        assert tiled.state() == tango.DevState.ON
+        assert data.state() == tango.DevState.ON
         assert microscope.state() == tango.DevState.ON
         assert tango.Database(host, port).get_device_info(microscope_device).name == microscope_device
     finally:

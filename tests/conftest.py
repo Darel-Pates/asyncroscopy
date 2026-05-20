@@ -24,7 +24,7 @@ from asyncroscopy.hardware.SCAN import SCAN
 from asyncroscopy.hardware.STAGE import STAGE
 from asyncroscopy.ThermoDigitalTwin import ThermoDigitalTwin
 from asyncroscopy.ThermoMicroscope import ThermoMicroscope
-from asyncroscopy.Tiled import Tiled
+from asyncroscopy.software.DATA import DATA
 
 
 class FakeAdornedImage:
@@ -35,12 +35,12 @@ class FakeAdornedImage:
 # We use ThermoDigitalTwin as our simulated microscope for all tests.
     
 @pytest.fixture(scope="session")
-def tiled_save_dir(tmp_path_factory):
-    return tmp_path_factory.mktemp("tiled-acquisitions")
+def data_save_dir(tmp_path_factory):
+    return tmp_path_factory.mktemp("data-acquisitions")
 
 
 @pytest.fixture(scope="session")
-def tango_ctx(tiled_save_dir):
+def tango_ctx(data_save_dir):
     """
     One Tango device server hosting SCAN + Microscope together.
 
@@ -96,10 +96,10 @@ def tango_ctx(tiled_save_dir):
             ],
         },
         {
-            "class": Tiled,
+            "class": DATA,
             "devices": [
                 {
-                    "name": "asyncroscopy/tiled/default",
+                    "name": "asyncroscopy/data/default",
                     "properties": {},
                 }
             ],
@@ -132,7 +132,7 @@ def tango_ctx(tiled_save_dir):
                         "flucam_device_address": "asyncroscopy/flucam/default",
                         "eds_device_address": "asyncroscopy/eds/default",
                         "stage_device_address": "asyncroscopy/stage/default",
-                        "tiled_device_address": "asyncroscopy/tiled/default",
+                        "data_device_address": "asyncroscopy/data/default",
                     },
                 }
             ],
@@ -143,8 +143,8 @@ def tango_ctx(tiled_save_dir):
     # in-process Tango contexts in one interpreter can segfault in PyTango.
     ctx = MultiDeviceTestContext(devices_info, process=False)
     with ctx:
-        tiled = tango.DeviceProxy(ctx.get_device_access("asyncroscopy/tiled/default"))
-        tiled.save_path = str(tiled_save_dir)
+        data = tango.DeviceProxy(ctx.get_device_access("asyncroscopy/data/default"))
+        data.save_path = str(data_save_dir)
         yield ctx
 
 
@@ -180,8 +180,8 @@ def stage_proxy(tango_ctx):
 
 
 @pytest.fixture(scope="session")
-def tiled_proxy(tango_ctx):
-    return tango.DeviceProxy(tango_ctx.get_device_access("asyncroscopy/tiled/default"))
+def data_proxy(tango_ctx):
+    return tango.DeviceProxy(tango_ctx.get_device_access("asyncroscopy/data/default"))
 
 
 @pytest.fixture(scope="session")
