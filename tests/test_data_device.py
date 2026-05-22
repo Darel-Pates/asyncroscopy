@@ -145,19 +145,18 @@ class TestDataDevice:
         monkeypatch,
         tmp_path,
     ) -> None:
-        run_commands = []
+        registrations = []
         saved = tmp_path / "frame.tiff"
         saved.write_bytes(b"fake-tiff")
         data_proxy.host = "127.0.0.1"
         data_proxy.port = 9091
         data_proxy.root_path = "served"
         data_proxy.set_api_key("secret")
-        monkeypatch.setattr(DATA, "_tiled_executable", lambda self: "tiled")
         monkeypatch.setattr(
-            "asyncroscopy.software.DATA.subprocess.run",
-            lambda command, **_: (
-                run_commands.append(command)
-                or type("Result", (), {"returncode": 0, "stdout": "ok"})()
+            DATA,
+            "_register_with_tiled_client",
+            lambda self, path, timeout: registrations.append(
+                {"path": path, "timeout": timeout}
             ),
         )
 
@@ -165,21 +164,7 @@ class TestDataDevice:
 
         assert result["registered"] is True
         assert result["tiled_key"] == "served/frame.tiff"
-        assert run_commands == [
-            [
-                "tiled",
-                "register",
-                "http://127.0.0.1:9091",
-                str(saved),
-                "--api-key",
-                "secret",
-                "--keep-ext",
-                "--walker",
-                "tiled.client.register:one_node_per_item",
-                "--prefix",
-                "served",
-            ]
-        ]
+        assert registrations == [{"path": str(saved), "timeout": 10.0}]
 
     def test_register_path_returns_timeout_result(
         self,
@@ -192,41 +177,30 @@ class TestDataDevice:
         data_proxy.host = "127.0.0.1"
         data_proxy.port = 9091
         data_proxy.set_api_key("secret")
-        monkeypatch.setattr(DATA, "_tiled_executable", lambda self: "tiled")
 
-        def fake_run(command, **kwargs):
-            raise subprocess.TimeoutExpired(
-                command, kwargs["timeout"], output="timed out"
-            )
+        def fake_register(self, path, timeout):
+            raise TimeoutError
 
-        monkeypatch.setattr("asyncroscopy.software.DATA.subprocess.run", fake_run)
+        monkeypatch.setattr(DATA, "_register_with_tiled_client", fake_register)
 
         result = json.loads(data_proxy.register_path(str(saved)))
 
         assert result["registered"] is False
         assert result["timed_out"] is True
         assert result["returncode"] is None
-        assert result["output"] == "timed out"
+        assert result["output"] == ""
 
     def test_register_path_returns_windows_tiled_key(
         self,
         data_proxy: tango.DeviceProxy,
         monkeypatch,
     ) -> None:
-        run_commands = []
         windows_path = "D:/microscopedata/tiled/ahoust17/frame.tiff"
         data_proxy.host = "127.0.0.1"
         data_proxy.port = 9091
         data_proxy.root_path = ""
         data_proxy.set_api_key("secret")
-        monkeypatch.setattr(DATA, "_tiled_executable", lambda self: "tiled")
-        monkeypatch.setattr(
-            "asyncroscopy.software.DATA.subprocess.run",
-            lambda command, **_: (
-                run_commands.append(command)
-                or type("Result", (), {"returncode": 0, "stdout": "ok"})()
-            ),
-        )
+        monkeypatch.setattr(DATA, "_register_with_tiled_client", lambda *args: None)
 
         result = json.loads(data_proxy.register_path(windows_path))
 

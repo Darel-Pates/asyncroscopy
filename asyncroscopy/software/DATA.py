@@ -7,6 +7,7 @@ devices.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import subprocess
@@ -280,8 +281,6 @@ class DATA(Device):
         )
 
     def _register_path(self, path: str) -> dict[str, Any]:
-        api_key = self._api_key or os.environ.get("TILED_API_KEY", "secret")
-        command = self._register_command(path, api_key, watch=False)
         tiled_key = self._tiled_key_for_path(path)
         timeout = float(
             os.environ.get(
@@ -289,17 +288,10 @@ class DATA(Device):
             )
         )
         try:
-            result = subprocess.run(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                timeout=timeout,
-            )
-        except subprocess.TimeoutExpired as exc:
-            output = _timeout_output(exc)
+            self._register_with_tiled_client(path, timeout)
+        except TimeoutError:
             self._tiled_server_status = (
-                f"running; register path timed out after {timeout:g}s; {output}"
+                f"running; register path timed out after {timeout:g}s"
             )
             return {
                 "path": path,
@@ -308,23 +300,50 @@ class DATA(Device):
                 "timed_out": True,
                 "timeout_seconds": timeout,
                 "returncode": None,
+                "output": "",
+            }
+        except Exception as exc:
+            output = str(exc)[-1000:]
+            self._tiled_server_status = f"running; register path failed; {output}"
+            return {
+                "path": path,
+                "tiled_key": tiled_key,
+                "registered": False,
+                "timed_out": False,
+                "returncode": None,
                 "output": output,
             }
-        registered = result.returncode == 0
-        output = result.stdout[-1000:] if result.stdout else ""
-        self._tiled_server_status = (
-            "running; registered path"
-            if registered
-            else f"running; register path failed; {output}"
-        )
+
+        self._tiled_server_status = "running; registered path"
         return {
             "path": path,
             "tiled_key": tiled_key,
-            "registered": registered,
+            "registered": True,
             "timed_out": False,
-            "returncode": result.returncode,
-            "output": output,
+            "returncode": 0,
+            "output": "",
         }
+
+    def _register_with_tiled_client(self, path: str, timeout: float) -> None:
+        asyncio.run(
+            asyncio.wait_for(self._register_with_tiled_client_async(path), timeout)
+        )
+
+    async def _register_with_tiled_client_async(self, path: str) -> None:
+        from tiled.client import from_uri
+        from tiled.client.register import identity, register
+
+        client = from_uri(
+            self._uri(),
+            api_key=self._api_key or os.environ.get("TILED_API_KEY", "secret"),
+        )
+        await register(
+            client,
+            path,
+            prefix=self._root_path or "/",
+            walkers=[ONE_NODE_PER_FILE_WALKER],
+            key_from_filename=identity,
+        )
 
     def _register_command(self, path: str, api_key: str, watch: bool) -> list[str]:
         command = [
@@ -402,13 +421,6 @@ def _is_windows_drive_path(path: Path | PureWindowsPath) -> bool:
 
 def _path_text(path: Path | PureWindowsPath) -> str:
     return str(path).replace("\\", "/") if _is_windows_drive_path(path) else str(path)
-
-
-def _timeout_output(exc: subprocess.TimeoutExpired) -> str:
-    output = exc.output or ""
-    if isinstance(output, bytes):
-        output = output.decode("utf-8", errors="replace")
-    return output[-1000:] if output else ""
 
 
 if __name__ == "__main__":

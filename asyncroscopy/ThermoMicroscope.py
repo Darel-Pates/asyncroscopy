@@ -19,7 +19,7 @@ DATA/Tiled unique id for that saved acquisition.
 import math
 import json
 import time
-import uuid
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -311,8 +311,8 @@ class ThermoMicroscope(Microscope):
 
         directory = Path(save_directory).expanduser()
         directory.mkdir(parents=True, exist_ok=True)
-        stamp = time.strftime("%Y%m%dT%H%M%S", time.localtime())
-        name = f"{self._safe_name(acquisition_type)}_{self._safe_name(detector)}_{stamp}_{uuid.uuid4().hex[:8]}.tiff"
+        stamp = datetime.now().strftime("%Y%m%dT%H%M%S%f")
+        name = f"{self._safe_name(acquisition_type)}_{self._safe_name(detector)}_{stamp}.tiff"
         return directory / name
 
     @staticmethod
