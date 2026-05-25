@@ -129,10 +129,15 @@ class TestDataDevice:
         saved.write_bytes(b"fake-tiff")
         data_proxy.host = "127.0.0.1"
         data_proxy.port = 9091
-        async def fake_register(self, path):
+
+        def fake_from_uri(*args, **kwargs):
+            return object()
+
+        async def fake_register(client, path, **kwargs):
             registrations.append(path)
 
-        monkeypatch.setattr(DATA, "_register_with_tiled_client_async", fake_register)
+        monkeypatch.setattr("asyncroscopy.software.DATA.from_uri", fake_from_uri)
+        monkeypatch.setattr("asyncroscopy.software.DATA.register", fake_register)
 
         result = data_proxy.register_path(str(saved))
 
@@ -147,9 +152,14 @@ class TestDataDevice:
         windows_path = "D:/microscopedata/tiled/ahoust17/frame.tiff"
         data_proxy.host = "127.0.0.1"
         data_proxy.port = 9091
-        async def fake_register(*args):
+
+        def fake_from_uri(*args, **kwargs):
+            return object()
+
+        async def fake_register(*args, **kwargs):
             return None
 
-        monkeypatch.setattr(DATA, "_register_with_tiled_client_async", fake_register)
+        monkeypatch.setattr("asyncroscopy.software.DATA.from_uri", fake_from_uri)
+        monkeypatch.setattr("asyncroscopy.software.DATA.register", fake_register)
 
         assert data_proxy.register_path(windows_path) == "frame.tiff"

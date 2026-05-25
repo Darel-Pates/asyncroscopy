@@ -15,6 +15,11 @@ from autoscript_tem_microscope_client.enumerations import (
 from asyncroscopy.ThermoMicroscope import ThermoMicroscope
 
 
+class FakeDataServer:
+    def register_path(self, path: str) -> str:
+        return path
+
+
 class TestThermoMicroscope:
     def test_startup_state_is_on(self, thermo_proxy: tango.DeviceProxy) -> None:
         assert thermo_proxy.state() == tango.DevState.ON
@@ -108,7 +113,7 @@ class TestThermoMicroscope:
         acquisition = FakeAcquisition()
         microscope = ThermoMicroscope.__new__(ThermoMicroscope)
         microscope._microscope = types.SimpleNamespace(acquisition=acquisition)
-        microscope._detector_proxies = {}
+        microscope._detector_proxies = {"data": FakeDataServer()}
 
         def fake_new_path(self, acquisition_type: str, detector: str, data_server):
             return tmp_path / f"{acquisition_type}_{detector}.tiff"
@@ -172,7 +177,7 @@ class TestThermoMicroscope:
         acquisition = FakeAcquisition()
         microscope = ThermoMicroscope.__new__(ThermoMicroscope)
         microscope._microscope = types.SimpleNamespace(acquisition=acquisition)
-        microscope._detector_proxies = {}
+        microscope._detector_proxies = {"data": FakeDataServer()}
         microscope._new_acquisition_path = types.MethodType(lambda self, acquisition_type, detector, data_server: tmp_path / f"{acquisition_type}_{detector}.tiff", microscope)
 
         result = ThermoMicroscope._acquire_stem_data_advanced(
@@ -266,7 +271,7 @@ class TestThermoMicroscope:
         eds = FakeEds()
         microscope = ThermoMicroscope.__new__(ThermoMicroscope)
         microscope._microscope = types.SimpleNamespace(analysis=types.SimpleNamespace(eds=eds))
-        microscope._detector_proxies = {}
+        microscope._detector_proxies = {"data": FakeDataServer()}
         microscope._new_acquisition_path = types.MethodType(lambda self, acquisition_type, detector, data_server, extension="tiff": tmp_path / f"{acquisition_type}_{detector}.{extension}", microscope)
 
         result = ThermoMicroscope._acquire_spectrum(microscope, "eds", 0.25)

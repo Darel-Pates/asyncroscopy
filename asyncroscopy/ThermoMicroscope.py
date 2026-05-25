@@ -161,7 +161,7 @@ class ThermoMicroscope(Microscope):
         data_server = self._detector_proxies.get("data")
         path = self._new_acquisition_path("stem_image", detector_type, data_server)
         adorned.save(str(path))
-        return data_server.register_path(str(path)) if data_server is not None else str(path)
+        return data_server.register_path(str(path))
 
     def _acquire_camera_image(self, imsize: int, exposure_time: float, detector: str, readout_area: str) -> str:
         """
@@ -173,7 +173,7 @@ class ThermoMicroscope(Microscope):
         data_server = self._detector_proxies.get("data")
         path = self._new_acquisition_path("camera_image", detector, data_server)
         adorned.save(str(path))
-        return data_server.register_path(str(path)) if data_server is not None else str(path)
+        return data_server.register_path(str(path))
 
     def _acquire_stem_image_advanced(
         self,
@@ -196,7 +196,7 @@ class ThermoMicroscope(Microscope):
         for image, detector in zip(adorned_images, detector_list):
             path = self._new_acquisition_path("stem_image", detector, data_server)
             image.save(str(path))
-            saved_paths.append(data_server.register_path(str(path)) if data_server is not None else str(path))
+            saved_paths.append(data_server.register_path(str(path)))
         return saved_paths
 
     def _acquire_stem_data_advanced(
@@ -219,7 +219,7 @@ class ThermoMicroscope(Microscope):
         data_server = self._detector_proxies.get("data")
         path = self._new_acquisition_path("stem_data", detector, data_server)
         adorned.save(str(path))
-        return data_server.register_path(str(path)) if data_server is not None else str(path)
+        return data_server.register_path(str(path))
 
     def _new_acquisition_path(self, acquisition_type: str, detector: str, data_server, extension: str = "tiff") -> Path:
         save_directory = self.acquisition_save_directory
@@ -235,6 +235,7 @@ class ThermoMicroscope(Microscope):
         name = f"{acquisition_type}_{detector}_{stamp}.{extension.lower().lstrip('.')}"
         return directory / name
 
+    # test: not sure this is how we want to save
     def _acquire_spectrum(self, detector_name: str, exposure_time: float) -> str:
         settings = EdsAcquisitionSettings()
         settings.eds_detector = EdsDetectorType.SUPER_X
@@ -247,7 +248,7 @@ class ThermoMicroscope(Microscope):
         path = self._new_acquisition_path("spectrum", detector_name, data_server, "emd")
         with h5py.File(path, "w") as emd:
             emd.create_dataset("spectrum", data=spectrum.data)
-        return data_server.register_path(str(path)) if data_server is not None else str(path)
+        return data_server.register_path(str(path))
 
     def _place_beam(self, position) -> None:
         """

@@ -18,10 +18,11 @@ from urllib.request import urlopen
 
 from tango import AttrWriteType, DevState
 from tango.server import Device, attribute, command
+from tiled.client import from_uri
+from tiled.client.register import identity, register
 
 DEFAULT_TILED_URI = "http://10.46.217.241:9091"
 DEFAULT_ACQUISITION_DIR = "outputs/tiled_acquisitions"
-DEFAULT_REGISTER_TIMEOUT_SECONDS = 10.0
 ONE_NODE_PER_FILE_WALKER = "tiled.client.register:one_node_per_item"
 
 
@@ -117,8 +118,13 @@ class DATA(Device):
     @command(dtype_in=str, dtype_out=str)
     def register_path(self, path: str) -> str:
         path = path.strip()
-        timeout = float(os.environ.get("ASYNCROSCOPY_TILED_REGISTER_TIMEOUT", DEFAULT_REGISTER_TIMEOUT_SECONDS))
-        asyncio.run(asyncio.wait_for(self._register_with_tiled_client_async(path), timeout))
+        timeout = 10 # seconds
+
+        async def register_with_tiled_client() -> None:
+            client = from_uri(self._uri(), api_key=self._api_key)
+            await register(client, path, walkers=[ONE_NODE_PER_FILE_WALKER], key_from_filename=identity)
+
+        asyncio.run(asyncio.wait_for(register_with_tiled_client(), timeout))
         self._tiled_server_status = "running; registered path"
         return PureWindowsPath(path).name if _is_windows_drive_path(path) else Path(path).name
 
@@ -141,13 +147,6 @@ class DATA(Device):
         self._tiled_watch_process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, text=True)
         time.sleep(0.5)
         self._tiled_server_status = "running; watcher started" if self._tiled_watch_process.poll() is None else "running; watcher failed"
-
-    async def _register_with_tiled_client_async(self, path: str) -> None:
-        from tiled.client import from_uri
-        from tiled.client.register import identity, register
-
-        client = from_uri(self._uri(), api_key=self._api_key)
-        await register(client, path, walkers=[ONE_NODE_PER_FILE_WALKER], key_from_filename=identity)
 
     @staticmethod
     def _parse_uri(uri: str) -> tuple[str, int]:
