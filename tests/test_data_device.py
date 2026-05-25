@@ -15,7 +15,6 @@ class TestDataDevice:
             "host": "127.0.0.1",
             "port": 9091,
             "save_path": str(tmp_path),
-            "root_path": "served",
         }
 
         returned = json.loads(data_proxy.configure(json.dumps(config)))
@@ -23,7 +22,6 @@ class TestDataDevice:
         assert returned["host"] == config["host"]
         assert returned["port"] == config["port"]
         assert returned["save_path"] == config["save_path"]
-        assert returned["root_path"] == config["root_path"]
         assert returned["uri"] == "http://127.0.0.1:9091"
 
     def test_start_tiled_server_uses_catalog_server_command(
@@ -51,8 +49,6 @@ class TestDataDevice:
         data_proxy.host = "127.0.0.1"
         data_proxy.port = 9091
         data_proxy.save_path = str(tmp_path)
-        data_proxy.root_path = "served"
-        data_proxy.set_api_key("secret")
         monkeypatch.setattr(DATA, "_tiled_alive", fake_alive)
         monkeypatch.setattr(DATA, "_tiled_executable", lambda self: "tiled")
         monkeypatch.setattr("asyncroscopy.software.DATA.subprocess.Popen", fake_popen)
@@ -67,6 +63,8 @@ class TestDataDevice:
         returned = json.loads(data_proxy.start_tiled_server())
 
         assert returned["tiled_server"] == "yes"
+        key_value = popen_calls[0]["command"][8]
+        assert key_value == popen_calls[1]["command"][5]
         assert popen_calls == [
             {
                 "command": [
@@ -78,7 +76,7 @@ class TestDataDevice:
                     str(tmp_path),
                     "--public",
                     "--api-key",
-                    "secret",
+                    key_value,
                     "--host",
                     "127.0.0.1",
                     "--port",
@@ -97,13 +95,11 @@ class TestDataDevice:
                     "http://127.0.0.1:9091",
                     str(tmp_path),
                     "--api-key",
-                    "secret",
+                    key_value,
                     "--keep-ext",
                     "--walker",
                     "tiled.client.register:one_node_per_item",
                     "--watch",
-                    "--prefix",
-                    "served",
                 ],
                 "kwargs": {
                     "stdout": subprocess.DEVNULL,
@@ -122,7 +118,7 @@ class TestDataDevice:
             ],
         ]
 
-    def test_path_exists_and_recent_files_use_save_path(
+    def test_path_exists_uses_save_path(
         self, data_proxy: tango.DeviceProxy, tmp_path
     ) -> None:
         saved = tmp_path / "frame.tiff"
@@ -131,13 +127,11 @@ class TestDataDevice:
 
         absolute = json.loads(data_proxy.path_exists(str(saved)))
         relative = json.loads(data_proxy.path_exists(saved.name))
-        recent = json.loads(data_proxy.get_recent())
 
         assert absolute["exists"] is True
         assert absolute["is_file"] is True
         assert absolute["size_bytes"] == len(b"fake-tiff")
         assert relative["exists"] is True
-        assert recent["files"][0]["file_name"] == saved.name
 
     def test_register_path_registers_single_file(
         self,
@@ -150,45 +144,15 @@ class TestDataDevice:
         saved.write_bytes(b"fake-tiff")
         data_proxy.host = "127.0.0.1"
         data_proxy.port = 9091
-        data_proxy.root_path = "served"
-        data_proxy.set_api_key("secret")
-        monkeypatch.setattr(
-            DATA,
-            "_register_with_tiled_client",
-            lambda self, path, timeout: registrations.append(
-                {"path": path, "timeout": timeout}
-            ),
-        )
+        async def fake_register(self, path):
+            registrations.append(path)
 
-        result = json.loads(data_proxy.register_path(str(saved)))
+        monkeypatch.setattr(DATA, "_register_with_tiled_client_async", fake_register)
 
-        assert result["registered"] is True
-        assert result["tiled_key"] == "served/frame.tiff"
-        assert registrations == [{"path": str(saved), "timeout": 10.0}]
+        result = data_proxy.register_path(str(saved))
 
-    def test_register_path_returns_timeout_result(
-        self,
-        data_proxy: tango.DeviceProxy,
-        monkeypatch,
-        tmp_path,
-    ) -> None:
-        saved = tmp_path / "frame.tiff"
-        saved.write_bytes(b"fake-tiff")
-        data_proxy.host = "127.0.0.1"
-        data_proxy.port = 9091
-        data_proxy.set_api_key("secret")
-
-        def fake_register(self, path, timeout):
-            raise TimeoutError
-
-        monkeypatch.setattr(DATA, "_register_with_tiled_client", fake_register)
-
-        result = json.loads(data_proxy.register_path(str(saved)))
-
-        assert result["registered"] is False
-        assert result["timed_out"] is True
-        assert result["returncode"] is None
-        assert result["output"] == ""
+        assert result == "frame.tiff"
+        assert registrations == [str(saved)]
 
     def test_register_path_returns_windows_tiled_key(
         self,
@@ -198,22 +162,15 @@ class TestDataDevice:
         windows_path = "D:/microscopedata/tiled/ahoust17/frame.tiff"
         data_proxy.host = "127.0.0.1"
         data_proxy.port = 9091
-        data_proxy.root_path = ""
-        data_proxy.set_api_key("secret")
-        monkeypatch.setattr(DATA, "_register_with_tiled_client", lambda *args: None)
+        async def fake_register(*args):
+            return None
 
-        result = json.loads(data_proxy.register_path(windows_path))
+        monkeypatch.setattr(DATA, "_register_with_tiled_client_async", fake_register)
 
-        assert result["registered"] is True
-        assert result["tiled_key"] == "frame.tiff"
+        assert data_proxy.register_path(windows_path) == "frame.tiff"
 
     def test_get_tiled_key_maps_saved_path_without_registering(
         self,
         data_proxy: tango.DeviceProxy,
     ) -> None:
-        data_proxy.root_path = "served"
-
-        assert (
-            data_proxy.get_tiled_key("D:/microscopedata/tiled/ahoust17/frame.tiff")
-            == "served/frame.tiff"
-        )
+        assert data_proxy.get_tiled_key("D:/microscopedata/tiled/ahoust17/frame.tiff") == "frame.tiff"

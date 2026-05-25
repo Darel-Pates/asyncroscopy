@@ -111,10 +111,6 @@ class TestThermoMicroscope:
             return tmp_path / f"{acquisition_type}_{detector}.tiff"
 
         microscope._new_acquisition_path = types.MethodType(fake_new_path, microscope)
-        microscope._register_acquisition_path = types.MethodType(
-            lambda self, path, data_server: None,
-            microscope,
-        )
 
         saved_paths = ThermoMicroscope._acquire_stem_image_advanced(
             microscope,
