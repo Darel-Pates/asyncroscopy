@@ -215,3 +215,5 @@ _build
 
 extra-notebooks-debug/
 tango_database.db
+
+pyjem-stuff/

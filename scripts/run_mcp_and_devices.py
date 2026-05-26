@@ -220,18 +220,41 @@ def cleanup_old_servers_for_class(class_name: str) -> None:
         log_stderr(f"[startup] Skipping stale-server cleanup: {exc}")
 
 def main():
-    host = "127.0.0.1"
+    host = input(
+        "Enter host address (default: 127.0.0.1): "
+    ).strip() or "127.0.0.1"
+
     python_bin = sys.executable
     port_socket: socket.socket | None = None
 
     try:
-        class_name = input("Enter the name of the main class to register (e.g., 'ThermoMicroscope'): ")
+        class_name = input(
+            "Enter the name of the main class to register "
+            "(e.g., 'ThermoMicroscope'): "
+        ).strip()
+
+        # Optional manual port input
+        port_input = input(
+            "Enter port number where (leave blank for auto-select): "
+        ).strip()
 
         cleanup_old_servers_for_class(class_name)
 
-        port, port_socket = find_free_port(host)
+        if port_input:
+            port = int(port_input)
+
+            # Reserve/check the requested port
+            port_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            port_socket.bind((host, port))
+            port_socket.listen(1)
+
+        else:
+            # Automatically find a free port
+            port, port_socket = find_free_port(host)
+
         tango_host = f"{host}:{port}"
 
+        print(f"Using Tango host: {tango_host}")
         print(f"[config] TANGO_HOST={tango_host}")
         os.environ["TANGO_HOST"] = tango_host
 
