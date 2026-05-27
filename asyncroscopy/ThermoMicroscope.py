@@ -268,7 +268,17 @@ class ThermoMicroscope(Microscope):
     def _get_fov(self) -> float:
         """get field of view in meters"""
         return self._microscope.optics.scan_field_of_view
-
+    
+    def _set_column_valves(self, state: str) -> None:
+        """Set column valves state."""
+        if self._microscope is not None:
+            if state == "open":
+                self._microscope.vacuum.column_valves.open()
+            elif state == "close":
+                self._microscope.vacuum.column_valves.close()
+            else:
+                print(f"Invalid valve state '{state}'. Use 'open' or 'close'.")
+        
     def _blank_beam(self) -> None:
         """blank beam"""
         if self._microscope is not None:
