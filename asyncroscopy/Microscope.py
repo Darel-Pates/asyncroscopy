@@ -388,6 +388,10 @@ class Microscope(Device, metaclass=CombinedMeta):
             self._place_beam([x, y])
 
 
+    def set_column_valves(self, state: str) -> None:
+        pass
+
+
     @command()
     def blank_beam(self) -> None:
         """blank beam"""
