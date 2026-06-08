@@ -10,11 +10,9 @@ import tango
 from tango import AttrWriteType, DevEncoded, DevState, DevVarFloatArray, DevFloat
 from tango.server import Device, DeviceMeta, attribute, command, device_property
 
-class CombinedMeta(DeviceMeta, ABCMeta):
-    """Combines Tango DeviceMeta and ABCMeta to allow abstract methods in Devices."""
-    pass
+from Microscope import Microscope
 
-class SPMMicroscope(Device, metaclass=CombinedMeta):
+class SPMMicroscope(Microscope):
     """
     Top-level SPM microscope device.
     """
@@ -78,21 +76,16 @@ class SPMMicroscope(Device, metaclass=CombinedMeta):
     def _connect(self):
         print(f"Must define a class-specific _connect() method")
 
+    def _disconnect(self):
+        print(f"Must define a class-specific _disconnect() method")
+
+    def _init_subclass_attributes(self) -> None:
+        #TODO
+        pass
+
     # ------------------------------------------------------------------
     # Commands
     # ------------------------------------------------------------------
-
-    @command
-    def Connect(self) -> None:
-        """Explicitly (re)connect to microscope hardware. Useful after a fault.
-        Also, sets the timeout fofr Tango device for 2 minutes (for larger things)
-        """
-        self._connect()
-
-    @command
-    def Disconnect(self) -> None:
-        """Disconnect from microscope hardware gracefully."""
-        pass
 
     @command(dtype_in=str, dtype_out=DevEncoded) #????
     def get_spectrum(self,) -> tuple[str, bytes]:
@@ -107,7 +100,7 @@ class SPMMicroscope(Device, metaclass=CombinedMeta):
         pass
 
     @command(dtype_in=DevVarFloatArray, dtype_out=None)
-    def move_tip(self, position) ->None:
+    def move_probe(self, position) ->None:
         """
         """
         pass
