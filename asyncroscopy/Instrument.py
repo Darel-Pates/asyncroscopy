@@ -13,7 +13,7 @@ class CombinedMeta(DeviceMeta, ABCMeta):
     """Combines Tango DeviceMeta and ABCMeta to allow abstract methods in Devices."""
     pass
 
-class Microscope(Device, metaclass=CombinedMeta):
+class Instrument(Device, metaclass=CombinedMeta):
 
     # ------------------------------------------------------------------
     # Device properties — configure in Tango DB per deployment
@@ -34,10 +34,10 @@ class Microscope(Device, metaclass=CombinedMeta):
     # ------------------------------------------------------------------
 
     microscope_type = attribute(
-        label="Microscope Type",
+        label="Instrument Type",
         dtype=str,
         access=AttrWriteType.READ,
-        doc="Microscope modality, for example 'STEM', 'SPM', 'TEM', or 'OPTIC'.",
+        doc="Instrument modality, for example 'STEM', 'SPM', 'TEM', or 'OPTIC'.",
     )
 
     # ------------------------------------------------------------------
@@ -54,7 +54,7 @@ class Microscope(Device, metaclass=CombinedMeta):
     # Attribute read methods
     # ------------------------------------------------------------------
     @abstractmethod
-    def read_microscope_type(self) -> str:
+    def read_instrument_type(self) -> str:
         pass
 
     # ------------------------------------------------------------------
