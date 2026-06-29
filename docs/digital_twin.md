@@ -1,6 +1,6 @@
 # DigitalTwin
 
-`DigitalTwin` is the simulated version of the `ThermoMicroscope`.  
+`DigitalTwin` is the simulated version of the `AutoScriptMicroscope`.  
 It provides realistic-enough image and spectrum behavior for development, testing, and demos without requiring AutoScript or hardware.
 
 ## How it works

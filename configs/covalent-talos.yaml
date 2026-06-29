@@ -1,0 +1,45 @@
+# Local test setup (utkarsh's ThinkPad) — everything on localhost.
+# Mirrors what was validated in issue #92: AutoScript on localhost:9095.
+#
+#   uv run scripts/run_servers.py --yaml configs/ThinkPad-utkarsh-covalent-setup.yaml
+
+microscope:
+  class_name: ThermoMicroscope
+  module_name: asyncroscopy.ThermoMicroscope
+  description: "Local Spectra 300 against a localhost AutoScript server"
+  host: 10.10.11.52
+  port: 9095
+
+digital_twin:
+  class_name: DigitalTwin
+  module_name: asyncroscopy.DigitalTwin
+  description: "Software digital twin"
+  # No host/port: the bundled twin needs no AutoScript endpoint.
+
+devices:
+  camera: { module_name: asyncroscopy.detectors.CAMERA }
+  corrector: { module_name: asyncroscopy.hardware.CORRECTOR }
+  data: { module_name: asyncroscopy.software.DATA }
+  eds: { module_name: asyncroscopy.detectors.EDS }
+  flucam: { module_name: asyncroscopy.detectors.FLUCAM }
+  scan: { module_name: asyncroscopy.hardware.SCAN }
+  stage: { module_name: asyncroscopy.hardware.STAGE }
+
+tango:
+  host: localhost
+  port: 9094
+
+tiled:
+  host: localhost
+  port: 9091
+  acquisition_dir: outputs/tiled_acquisitions
+  autostart: true
+
+device_timeout_seconds: 120
+
+# Reserved for a future commit — run_servers.py does NOT start MCP yet.
+mcp:
+  autostart: false
+  class_name: ThermoMCP
+  http_host: 127.0.0.1
+  http_port: 8000

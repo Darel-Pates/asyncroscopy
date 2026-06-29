@@ -3,7 +3,7 @@ import types
 import h5py
 import numpy as np
 
-from asyncroscopy.software.DataWriter import save_acquisition, save_acquisition_hdf5
+from asyncroscopy.data.data_writer import save_acquisition, save_acquisition_hdf5
 
 
 class FakeDataServer:

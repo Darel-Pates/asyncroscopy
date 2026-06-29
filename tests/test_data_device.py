@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import tango
 
-from asyncroscopy.software.DATA import DATA
+from asyncroscopy.data.data import DATA
 
 
 class TestDataDevice:
@@ -73,9 +73,9 @@ class TestDataDevice:
         data_proxy.save_path = str(tmp_path)
         monkeypatch.setattr(DATA, "_tiled_alive", fake_alive)
         monkeypatch.setattr(DATA, "_tiled_executable", lambda self: "tiled")
-        monkeypatch.setattr("asyncroscopy.software.DATA.subprocess.Popen", fake_popen)
+        monkeypatch.setattr("asyncroscopy.data.data.subprocess.Popen", fake_popen)
         monkeypatch.setattr(
-            "asyncroscopy.software.DATA.subprocess.run",
+            "asyncroscopy.data.data.subprocess.run",
             lambda command, **_: (
                 run_commands.append(command)
                 or type("Result", (), {"returncode": 0, "stdout": ""})()
@@ -145,8 +145,8 @@ class TestDataDevice:
         async def fake_register(client, path, **kwargs):
             registrations.append(path)
 
-        monkeypatch.setattr("asyncroscopy.software.DATA.from_uri", fake_from_uri)
-        monkeypatch.setattr("asyncroscopy.software.DATA.register", fake_register)
+        monkeypatch.setattr("asyncroscopy.data.data.from_uri", fake_from_uri)
+        monkeypatch.setattr("asyncroscopy.data.data.register", fake_register)
 
         result = data_proxy.register_path(str(saved))
 
@@ -168,8 +168,8 @@ class TestDataDevice:
         async def fake_register(*args, **kwargs):
             return None
 
-        monkeypatch.setattr("asyncroscopy.software.DATA.from_uri", fake_from_uri)
-        monkeypatch.setattr("asyncroscopy.software.DATA.register", fake_register)
+        monkeypatch.setattr("asyncroscopy.data.data.from_uri", fake_from_uri)
+        monkeypatch.setattr("asyncroscopy.data.data.register", fake_register)
 
         assert data_proxy.register_path(windows_path) == "frame.h5"
 
@@ -206,9 +206,9 @@ class TestDataDevice:
         async def fake_sleep(seconds):
             sleeps.append(seconds)
 
-        monkeypatch.setattr("asyncroscopy.software.DATA.from_uri", fake_from_uri)
-        monkeypatch.setattr("asyncroscopy.software.DATA.register", fake_register)
-        monkeypatch.setattr("asyncroscopy.software.DATA.asyncio.sleep", fake_sleep)
+        monkeypatch.setattr("asyncroscopy.data.data.from_uri", fake_from_uri)
+        monkeypatch.setattr("asyncroscopy.data.data.register", fake_register)
+        monkeypatch.setattr("asyncroscopy.data.data.asyncio.sleep", fake_sleep)
 
         assert data_proxy.register_path(str(saved)) == "frame.h5"
         assert fake_client.calls == 3
@@ -253,9 +253,9 @@ class TestDataDevice:
         run_commands = []
         monkeypatch.setattr(DATA, "_tiled_alive", fake_alive)
         monkeypatch.setattr(DATA, "_tiled_executable", lambda self: "tiled")
-        monkeypatch.setattr("asyncroscopy.software.DATA.subprocess.Popen", fake_popen)
+        monkeypatch.setattr("asyncroscopy.data.data.subprocess.Popen", fake_popen)
         monkeypatch.setattr(
-            "asyncroscopy.software.DATA.subprocess.run",
+            "asyncroscopy.data.data.subprocess.run",
             lambda command, **_: (
                 run_commands.append(command)
                 or type("Result", (), {"returncode": 0, "stdout": ""})()
@@ -291,8 +291,8 @@ class TestDataDevice:
         async def fake_register(*args, **kwargs):
             raise FileNotFoundError(requested_path)
 
-        monkeypatch.setattr("asyncroscopy.software.DATA.from_uri", lambda *args, **kwargs: object())
-        monkeypatch.setattr("asyncroscopy.software.DATA.register", fake_register)
+        monkeypatch.setattr("asyncroscopy.data.data.from_uri", lambda *args, **kwargs: object())
+        monkeypatch.setattr("asyncroscopy.data.data.register", fake_register)
 
         with pytest.raises(tango.DevFailed) as exc_info:
             data_proxy.register_path(str(requested_path))

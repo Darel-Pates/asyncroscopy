@@ -1,0 +1,32 @@
+microscope:
+  class_name: ThermoMicroscope
+  module_name: asyncroscopy.ThermoMicroscope
+  description: "Thermo Fisher Spectra 300 TEM (Simulated Endpoint)"
+  host: localhost
+  port: 9095
+
+digital_twin:
+  class_name: DigitalTwin
+  module_name: asyncroscopy.DigitalTwin
+  description: "Digital Twin Simulation Environment"
+
+devices:
+  camera:    { module_name: asyncroscopy.detectors.CAMERA }
+  corrector: { module_name: asyncroscopy.hardware.CORRECTOR }
+  data:      { module_name: asyncroscopy.software.DATA }
+  eds:       { module_name: asyncroscopy.detectors.EDS }
+  flucam:    { module_name: asyncroscopy.detectors.FLUCAM }
+  scan:      { module_name: asyncroscopy.hardware.SCAN }
+  stage:     { module_name: asyncroscopy.hardware.STAGE }
+
+tango:
+  host: localhost
+  port: 9094
+
+tiled:
+  host: localhost
+  port: 9091
+  acquisition_dir: outputs/tiled_acquisitions
+  autostart: true
+
+device_timeout_seconds: 120

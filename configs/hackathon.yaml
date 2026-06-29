@@ -1,0 +1,32 @@
+microscope:
+  class_name: AutoScriptMicroscope
+  module_name: asyncroscopy.instruments.electron_microscope.auto_script
+  description: Thermo Fisher Spectra 300 TEM
+  host: 127.0.0.1
+  port: 9095
+digital_twin:
+  class_name: HackathonDigitalTwin
+  module_name: asyncroscopy.instruments.electron_microscope.hackathon_digital_twin
+  description: File-backed 4D-STEM hackathon digital twin
+devices:
+  camera:
+    module_name: asyncroscopy.instruments.electron_microscope.detectors.camera
+  data:
+    module_name: asyncroscopy.data.data
+  eds:
+    module_name: asyncroscopy.instruments.electron_microscope.detectors.eds
+  flucam:
+    module_name: asyncroscopy.instruments.electron_microscope.detectors.flucam
+  scan:
+    module_name: asyncroscopy.instruments.electron_microscope.hardware.scan
+  stage:
+    module_name: asyncroscopy.instruments.electron_microscope.hardware.stage
+tango:
+  host: 127.0.0.1
+  port: 9094
+tiled:
+  host: 127.0.0.1
+  port: 9091
+  acquisition_dir: /Users/austin/Downloads/18167694/hackathon_data
+  autostart: true
+device_timeout_seconds: 120

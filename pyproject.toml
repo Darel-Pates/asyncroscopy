@@ -36,7 +36,9 @@ dependencies = [
     "jupyter-book>=2.0.0",
     "tiled[all]>=0.2.9",
     "pyyaml>=6.0.3",
-    "pyqt6>=6.11.0",
+    "pyqt5>=5.15.11,<5.16",
+    "pyqt5-qt5==5.15.2; sys_platform == 'win32'",
+    "pyqt6>=6.8,<6.13",
 ]
 
 [tool.setuptools]
