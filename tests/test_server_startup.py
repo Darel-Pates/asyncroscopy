@@ -153,7 +153,7 @@ def test_can_start_scan_data_and_microscope_servers(tango_database, tmp_path) ->
 
     scan_device = "asyncroscopy/scan/default"
     data_device = "asyncroscopy/data/default"
-    microscope_device = "asyncroscopy/microscope/default"
+    microscope_device = "asyncroscopy/instrument/default"
 
     add_device(db, "SCAN/scan_instance", "SCAN", scan_device)
     add_device(db, "DATA/data_instance", "DATA", data_device)

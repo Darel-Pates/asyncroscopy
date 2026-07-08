@@ -1,8 +1,8 @@
 # Asyncroscopy MCP Server
 
 The MCP server is a FastMCP HTTP bridge over the live Tango database. It should
-start after the Tango database, support devices, Tiled, and microscope or
-digital twin are ready.
+start after the Tango database, support devices, Tiled, and selected instrument
+are ready.
 
 ## Start It
 
@@ -10,7 +10,7 @@ Start the device stack first:
 
 ```bash
 uv run startup_scripts/run_servers.py --yaml configs/Spectra300.yaml
-uv run startup_scripts/run_servers.py --yaml configs/Spectra300.yaml --microscope dt
+uv run startup_scripts/run_servers.py --yaml configs/STEMDigitalTwin.yaml
 ```
 
 Then start MCP in another terminal or on the MCP computer:

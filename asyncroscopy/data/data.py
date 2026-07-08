@@ -35,6 +35,7 @@ DEFAULT_TILED_URI = "http://10.46.217.241:9091"
 DEFAULT_ACQUISITION_DIR = "outputs/tiled_acquisitions"
 ONE_NODE_PER_FILE_WALKER = "tiled.client.register:one_node_per_item"
 REGISTER_TIMEOUT_SECONDS = 120
+REGISTER_SAVE_PATH_TIMEOUT_SECONDS = 3600
 REGISTER_POLL_SECONDS = 0.25
 
 
@@ -131,21 +132,26 @@ class DATA(Device):
             self._tiled_server_status = "running; files register manually"
             return self.get_config()
 
-        catalog = str(Path(self._save_path).expanduser() / ".asyncroscopy_tiled_catalog.db")
-        if _is_windows_drive_path(catalog):
-            catalog = catalog.replace("\\", "/")
+        save_path = PureWindowsPath(self._save_path) if _is_windows_drive_path(self._save_path) else Path(self._save_path).expanduser()
+        catalog = save_path / ".asyncroscopy_tiled_catalog.db"
+        catalog_database = _catalog_database_uri(catalog)
 
         try:
             _ensure_directory(self._save_path)
-            command = [self._tiled_executable(), "catalog", "init", "--if-not-exists", catalog]
+            command = [*self._tiled_command(), "catalog", "init", "--if-not-exists", catalog_database]
             subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        except subprocess.CalledProcessError as exc:
+            self._tiled_server = "no"
+            output = (exc.stdout or "").strip()
+            self._tiled_server_status = f"{exc}; output: {output}" if output else str(exc)
+            return self.get_config()
         except Exception as exc:
             self._tiled_server = "no"
             self._tiled_server_status = str(exc)
             return self.get_config()
 
         command = [
-            self._tiled_executable(), "serve", "catalog", catalog,
+            *self._tiled_command(), "serve", "catalog", catalog_database,
             "--read", self._save_path, "--public", "--api-key", self._api_key,
             "--host", self._host, "--port", str(self._port),
         ]
@@ -205,6 +211,35 @@ class DATA(Device):
         self._tiled_server_status = "running; registered path"
         return key
 
+    @command(dtype_out=str)
+    def register_save_path(self) -> str:
+        """Register the configured save directory with Tiled once."""
+        save_path = str(Path(self._save_path).expanduser())
+
+        async def register_directory_with_tiled_client() -> None:
+            client = from_uri(self._uri(), api_key=self._api_key)
+            await register(client, save_path, walkers=[ONE_NODE_PER_FILE_WALKER], key_from_filename=identity)
+
+        try:
+            asyncio.run(asyncio.wait_for(register_directory_with_tiled_client(), REGISTER_SAVE_PATH_TIMEOUT_SECONDS))
+        except Exception as exc:
+            message = (
+                f"Save path registration failed: {exc}\n\n"
+                f"Data save path:\n    {save_path}\n\n"
+                f"Tiled server serving:\n    {self._tiled_serve_path or '(external server; path not managed by DATA)'}"
+            )
+            self._tiled_server_status = message
+            raise RuntimeError(message) from exc
+
+        result = {
+            "registered_path": save_path,
+            "tiled_server": self._tiled_server,
+            "tiled_server_status": "running; registered save path",
+            "tiled_server_serving": self._tiled_serve_path,
+        }
+        self._tiled_server_status = result["tiled_server_status"]
+        return json.dumps(result)
+
     def _uri(self) -> str:
         return f"http://{self._host}:{self._port}"
 
@@ -248,14 +283,19 @@ class DATA(Device):
         return host or "10.46.217.241", int(port or 9091)
 
     @staticmethod
-    def _tiled_executable() -> str:
-        candidate = Path(sys.executable).with_name("tiled")
-        return str(candidate) if candidate.exists() else "tiled"
+    def _tiled_command() -> list[str]:
+        return [sys.executable, "-m", "tiled"]
 
 
 def _is_windows_drive_path(path: str | Path | PureWindowsPath) -> bool:
-    text = str(path)
-    return isinstance(path, PureWindowsPath) or (len(text) >= 3 and text[1] == ":" and text[0].isalpha() and text[2] in {"\\", "/"})
+    windows_path = PureWindowsPath(path)
+    return bool(windows_path.drive)
+
+
+def _catalog_database_uri(path: str | Path | PureWindowsPath) -> str:
+    if _is_windows_drive_path(path):
+        return f"sqlite:///{PureWindowsPath(path).as_posix()}"
+    return str(Path(path).expanduser())
 
 
 def _ensure_directory(path: str | Path) -> None:

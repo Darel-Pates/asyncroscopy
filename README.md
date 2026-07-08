@@ -51,17 +51,14 @@ See - docs/dev_guide.md
 ### Core installation (simulation mode)
 
 ```bash
-pip install --find-links ./stubs -e .
-```
-
-or with `uv`:
-
-```bash
 uv sync
 ```
 
-This installs `asyncroscopy` and all core dependencies. AutoScript is not required—the
-framework will fall back to simulated acquisition automatically.
+This installs `asyncroscopy` and all core dependencies. The vendor wheels are
+local, version-pinned, and resolved via `[tool.uv.sources]` in `pyproject.toml`
+(AutoScript under `stubs/AutoScript_v_1.17/`, PyJEM under
+`stubs/PyJEM_v_1.3.0.3564/`). AutoScript/PyJEM hardware is not required—the
+framework falls back to simulated acquisition automatically.
 
 ### Hardware installation (Thermo Fisher AutoScript)
 

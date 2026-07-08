@@ -197,7 +197,7 @@ def patched_single_image(monkeypatch: pytest.MonkeyPatch) -> None:
     Patch AutoScriptMicroscope._acquire_scanned_image so acquire_scanned_image() works
     without AutoScript/hardware.
     """
-    def fake_acquire(self, imsize: int, dwell_time: float, detector_list: list = ["haadf"], scan_region: list[float] = [0.0, 0.0, 1.0, 1.0]):
+    def fake_acquire(self, imsize: int, dwell_time: float, detector_list: list = ["haadf"], scan_region: list[float] = [0.0, 0.0, 1.0, 1.0], output_format: str = ".h5"):
         # Deterministic image makes tests stable
         arr = np.arange(imsize * imsize, dtype=np.uint16)
         return FakeAdornedImage(arr.reshape(imsize, imsize))
@@ -218,7 +218,7 @@ def patched_single_image(monkeypatch: pytest.MonkeyPatch) -> None:
 def patched_path_acquisition(monkeypatch: pytest.MonkeyPatch, tmp_path):
     calls = []
 
-    def fake_acquire(self, imsize: int, dwell_time: float, detector_list: list = ["haadf"], scan_region: list[float] = [0.0, 0.0, 1.0, 1.0]):
+    def fake_acquire(self, imsize: int, dwell_time: float, detector_list: list = ["haadf"], scan_region: list[float] = [0.0, 0.0, 1.0, 1.0], output_format: str = ".h5"):
         calls.append(
             {
                 "imsize": imsize,
@@ -239,7 +239,7 @@ def patched_path_acquisition(monkeypatch: pytest.MonkeyPatch, tmp_path):
 def patched_scanned_path_acquisition(monkeypatch: pytest.MonkeyPatch, tmp_path):
     calls = []
 
-    def fake_acquire(self, imsize: int, dwell_time: float, detector_list: list = ["haadf"], scan_region: list[float] = [0.0, 0.0, 1.0, 1.0]):
+    def fake_acquire(self, imsize: int, dwell_time: float, detector_list: list = ["haadf"], scan_region: list[float] = [0.0, 0.0, 1.0, 1.0], output_format: str = ".h5"):
         calls.append(
             {
                 "imsize": imsize,

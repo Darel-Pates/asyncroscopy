@@ -518,15 +518,16 @@ class DigitalTwin(ElectronMicroscope):
         dwell_time: float,
         detector_list: list[str] = ["haadf"],
         scan_region: list[float] = [0.0, 0.0, 1.0, 1.0],
+        output_format: str = ".h5",
     ) -> str:
-        """Simulate STEM acquisition, save HDF5 data with metadata, and return its DATA/Tiled key."""
+        """Simulate STEM acquisition, save the data with metadata, and return its DATA/Tiled key."""
         detector_list = [detector.upper() for detector in detector_list]
         data_server = self._detector_proxies.get("data")
         images = []
         for detector in detector_list:
             image = self._render_stem_image(int(imsize), float(dwell_time), [detector])
             images.append(image)
-        return save_acquisition(self, data_server, "stem_image", detector_list, images)
+        return save_acquisition(self, data_server, "stem_image", detector_list, images, output_format=output_format)
 
     def _simulate_spectrum(self, detector_name: str, exposure_time: float) -> dict[str, float]:
         """Simulate EDS spectrum acquisition at the current beam position weighted by surrounding particles."""

@@ -18,8 +18,6 @@ DATA/Tiled unique id for that saved acquisition.
 
 import math
 import time
-from datetime import datetime
-from pathlib import Path
 
 import numpy as np
 import tango
@@ -54,15 +52,20 @@ class AutoScriptMicroscope(ElectronMicroscope):
     # ------------------------------------------------------------------
     # Device properties — configure in Tango DB per deployment
     # ------------------------------------------------------------------
-    autoscript_host_ip = device_property(
+    hardware_host = device_property(
         dtype=str,
         default_value="10.46.217.241",
         doc="Hostname or IP of the AutoScript microscope server",
     )
-    autoscript_host_port = device_property(
+    hardware_port = device_property(
         dtype=int,
         default_value=9095,
-        doc="Hostname or IP of the AutoScript microscope server",
+        doc="Port of the AutoScript microscope server",
+    )
+    hardware_timeout_seconds = device_property(
+        dtype=int,
+        default_value=120,
+        doc="Hardware connection timeout in seconds.",
     )
     acquisition_save_directory = device_property(
         dtype=str,
@@ -156,8 +159,8 @@ class AutoScriptMicroscope(ElectronMicroscope):
             return
         try:
             self._microscope = TemMicroscopeClient()
-            self._microscope.connect(self.autoscript_host_ip, self.autoscript_host_port)
-            self.info_stream(f"Connected to AutoScript at {self.autoscript_host_ip}:{self.autoscript_host_port}")
+            self._microscope.connect(self.hardware_host, self.hardware_port)
+            self.info_stream(f"Connected to AutoScript at {self.hardware_host}:{self.hardware_port}")
             self.is_autoscript = True
         except Exception as e:
             self.error_stream(f"AutoScript connection failed: {e}")
@@ -245,44 +248,16 @@ class AutoScriptMicroscope(ElectronMicroscope):
     # ------------------------------------------------------------------
     # Internal acquisition helpers
     # ------------------------------------------------------------------
-    def _persist(self, adorned, acquisition_type, detector, data_server, dataset_name="image"):
-        """Save acquired images in the format requested by the SCAN device.
-        """
-        scan = self._detector_proxies.get("scan")
-        fmt = scan.output_format if scan is not None else ".h5"  # ".h5" default
-        if fmt == ".h5":
-            return save_acquisition(self, data_server, acquisition_type, detector, adorned, dataset_name=dataset_name)
-        if fmt != ".tiff":
-            raise ValueError(f"Unsupported output_format {fmt!r}; expected '.h5' or '.tiff'")
-
-        # .tiff → AutoScript native save, one file per detector sharing one stamp
-        images = list(adorned) if isinstance(adorned, (list, tuple)) else [adorned]
-        detectors = list(detector) if isinstance(detector, (list, tuple)) else [detector]
-        if len(images) != len(detectors):
-            raise ValueError(f"Got {len(images)} images for {len(detectors)} detector(s) {detectors}")
-
-        save_dir = data_server.save_path if data_server is not None else DEFAULT_ACQUISITION_DIR
-        directory = Path(save_dir).expanduser()
-        directory.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now().strftime("%Y%m%dT%H%M%S%f")
-        stem = f"{acquisition_type}_{stamp}"
-        # AutoScript returns images in the requested detector order (assumed; verify on hardware)
-        for img, det in zip(images, detectors):
-            path = directory / f"{stem}_{det}.tiff"
-            img.save(str(path))
-            if data_server is not None:
-                data_server.register_path(str(path))
-        return stem
-
     def _acquire_scanned_image(
         self,
         imsize: int,
         dwell_time: float,
         detector_list: list[str] = ["haadf"],
         scan_region: list[float] = [0.0, 0.0, 1.0, 1.0],
+        output_format: str = ".h5",
     ) -> str:
         """
-        Call AutoScript scanned image acquisition, save one HDF5 file, and return its DATA/Tiled key.
+        Call AutoScript scanned image acquisition, save it, and return its DATA/Tiled key.
         """
         detector_list = [d.upper() for d in detector_list]
         settings = StemAcquisitionSettings(dwell_time=dwell_time, detector_types=detector_list, size=imsize, region=Region(RegionCoordinateSystem.RELATIVE, Rectangle(*scan_region)))
@@ -290,18 +265,18 @@ class AutoScriptMicroscope(ElectronMicroscope):
         if not isinstance(adorned, list):
             adorned = [adorned]
         data_server = self._detector_proxies.get("data")
-        return self._persist(adorned, "stem_image", detector_list, data_server)
+        return save_acquisition(self, data_server, "stem_image", detector_list, adorned, output_format=output_format)
 
 
     def _acquire_camera_image(self, imsize: int, exposure_time: float, detector: str, readout_area: str) -> str:
         """
-        Call AutoScript acquisition, save the adorned image, and return its path.
+        Call AutoScript acquisition, save the adorned image, and return its DATA/Tiled key.
         this is the advanced version
         """
         settings = CameraAcquisitionSettings(camera_detector=detector, size=imsize, exposure_time=exposure_time, fixed_readout_area=readout_area, frame_combining=1)
         adorned = self._microscope.acquisition.acquire_camera_image_advanced(settings)
         data_server = self._detector_proxies.get("data")
-        return self._persist(adorned, "camera_image", str(detector), data_server)
+        return save_acquisition(self, data_server, "camera_image", str(detector), adorned)
 
     def _acquire_scanned_data_advanced(self, imsize: int, dwell_time: float, detector: str, scan_region: list[float]) -> str:
         """

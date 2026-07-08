@@ -5,15 +5,21 @@ This module starts from the JEOL implementation that exists on upstream/main
 and adapts it to the instrument-centered package layout.
 """
 
-from datetime import datetime
-from pathlib import Path
-
+import numpy as np
 import tango
 from tango import DevState
 from tango.server import device_property
 
 from asyncroscopy.data.data_writer import DEFAULT_ACQUISITION_DIR, save_acquisition
 from asyncroscopy.instruments.electron_microscope.electron_microscope import ElectronMicroscope
+
+# PyJEM imports -> this block will be removed after testing this on remote pc
+try:
+    from PyJEM import detector
+
+    _PYJEM_AVAILABLE = True
+except ImportError:
+    _PYJEM_AVAILABLE = False
 
 
 class JeolMicroscope(ElectronMicroscope):
@@ -24,15 +30,22 @@ class JeolMicroscope(ElectronMicroscope):
     dedicated detector devices and read via DeviceProxy at acquisition time.
     """
 
-    pyjem_host_ip = device_property(
+    hardware_host = device_property(
         dtype=str,
-        default_value='10.46.217.241',
-        doc='Hostname or IP of the JEOL microscope control server.',
+        default_value='localhost',
+        doc='Hostname or IP of the JEOL microscope control server. PyJEM REST '
+        'clients default to localhost (the scope PC); set this to point at the '
+        'scope from another machine.',
     )
-    pyjem_host_port = device_property(
+    hardware_port = device_property(
         dtype=int,
         default_value=9095,
         doc='Port of the JEOL microscope control server.',
+    )
+    hardware_timeout_seconds = device_property(
+        dtype=int,
+        default_value=120,
+        doc='Hardware connection timeout in seconds.',
     )
     acquisition_save_directory = device_property(
         dtype=str,
@@ -56,8 +69,37 @@ class JeolMicroscope(ElectronMicroscope):
         self.set_state(DevState.ON)
 
     def _connect_hardware(self) -> None:
-        self._microscope = None
-        self.warn_stream('JEOL/PyJEM hardware connection is not implemented yet.')
+        """Point the PyJEM ``detector`` REST client at the JEOL control server.
+
+        Unlike AutoScript (a client object you ``.connect()``), PyJEM's
+        ``detector`` module *is* the REST handle: configuring its target IP is
+        what makes acquisition talk to the scope. We store the module as
+        ``self._microscope`` to mirror the AutoScript device's connected handle.
+
+        ``set_port`` is intentionally NOT called -- the detector REST service
+        has its own default port, distinct from ``hardware_port`` (which is
+        AutoScript's port and unused here).
+        """
+        if not _PYJEM_AVAILABLE or self.testing_mode_bool:
+            self.warn_stream('PyJEM not available; running JEOL device in testing mode.')
+            return
+        try:
+            detector.set_ip(self.hardware_host)
+            # Health-check: get_attached_detector() is a REST round-trip to
+            # TEMCenter, so it raises if the server is unreachable. (The real
+            # PyJEM 1.3.0.3564 detector module has no check_connection() -- this
+            # is verified against the installed surface, not the docs.) An empty
+            # list is a reachable-but-unconfigured scope, not a failed connection.
+            attached = detector.get_attached_detector()
+            self._microscope = detector
+            self.info_stream(
+                f'Connected to JEOL/PyJEM detector server at {self.hardware_host}; '
+                f'attached detectors: {attached}'
+            )
+        except Exception as exc:
+            self.error_stream(f'JEOL/PyJEM connection failed: {exc}')
+            self.set_state(DevState.FAULT)
+            self._microscope = None
 
     def _connect_detector_proxies(self) -> None:
         addresses: dict[str, str] = {
@@ -100,31 +142,16 @@ class JeolMicroscope(ElectronMicroscope):
     # ------------------------------------------------------------------
     # Internal acquisition helpers
     # ------------------------------------------------------------------
-    def _persist(self, adorned, acquisition_type, detector, data_server, dataset_name='image'):
-        """Save acquired images in the format requested by the SCAN device."""
-        scan = self._detector_proxies.get('scan')
-        fmt = scan.output_format if scan is not None else '.h5'
-        if fmt == '.h5':
-            return save_acquisition(self, data_server, acquisition_type, detector, adorned, dataset_name=dataset_name)
-        if fmt != '.tiff':
-            raise ValueError(f"Unsupported output_format {fmt!r}; expected '.h5' or '.tiff'")
+    @staticmethod
+    def _decode_rawdata(raw: bytes, width: int, height: int) -> np.ndarray:
+        """
+        Decode a PyJEM ``snapshot_rawdata()`` byte buffer into a 2D image.
 
-        images = list(adorned) if isinstance(adorned, (list, tuple)) else [adorned]
-        detectors = list(detector) if isinstance(detector, (list, tuple)) else [detector]
-        if len(images) != len(detectors):
-            raise ValueError(f'Got {len(images)} images for {len(detectors)} detector(s) {detectors}')
-
-        save_dir = data_server.save_path if data_server is not None else DEFAULT_ACQUISITION_DIR
-        directory = Path(save_dir).expanduser()
-        directory.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now().strftime('%Y%m%dT%H%M%S%f')
-        stem = f'{acquisition_type}_{stamp}'
-        for img, det in zip(images, detectors):
-            path = directory / f'{stem}_{det}.tiff'
-            img.save(str(path))
-            if data_server is not None:
-                data_server.register_path(str(path))
-        return stem
+        PyJEM returns raw little-endian int16 bytes; the shape comes from the
+        detector's imaging area. Reshape order follows the PyJEM docs
+        (``(width, height)``) and is unverified for non-square scans.
+        """
+        return np.frombuffer(raw, dtype=np.dtype('<i2')).reshape((width, height))
 
     def _acquire_scanned_image(
         self,
@@ -132,12 +159,52 @@ class JeolMicroscope(ElectronMicroscope):
         dwell_time: float,
         detector_list: list[str] = ['haadf'],
         scan_region: list[float] = [0.0, 0.0, 1.0, 1.0],
+        output_format: str = '.h5',
     ) -> str:
-        """Acquire a scanned image through the JEOL API."""
-        tango.Except.throw_exception(
-            'UnsupportedCommand',
-            'JEOL scanned image acquisition is not implemented yet.',
-            '_acquire_scanned_image()',
+        """
+        Acquire a STEM scan over the requested detectors via the PyJEM
+        ``detector`` module and return the saved acquisition's DATA/Tiled key.
+
+        PyJEM acquisition is synchronous, so each detector is scanned in turn.
+        ``dwell_time`` is given in seconds; the PyJEM API takes microseconds.
+        """
+        if not _PYJEM_AVAILABLE:
+            tango.Except.throw_exception(
+                'UnsupportedCommand',
+                'PyJEM is not installed; cannot acquire on JEOL hardware.',
+                '_acquire_scanned_image()',
+            )
+
+        detector_list = [d.upper() for d in detector_list]
+        full_frame = [0.0, 0.0, 1.0, 1.0]
+        images = []
+        image_settings = []
+        for name in detector_list:
+            det = detector.Detector(name)
+            if scan_region == full_frame:
+                det.set_scanmode(0)                          # full-frame Scan
+                det.set_imaging_area(imsize, imsize)
+            else:
+                extent = det.get_detectorsetting()['ImagingArea']['Width']
+                left, top, right, bottom = scan_region
+                det.set_scanmode(3)                          # Area (sub-region)
+                det.set_areamode_imagingarea(
+                    Width=int((right - left) * extent),
+                    Height=int((bottom - top) * extent),
+                    X=int(left * extent),
+                    Y=int(top * extent),
+                )
+            det.set_exposuretime_value(dwell_time * 1e6)     # PyJEM API takes microseconds while AutoScript takes seconds -- Lets keep default to seconds
+            settings = det.get_detectorsetting()
+            area = settings['AreaModeImagingArea'] if scan_region != full_frame else settings['ImagingArea']
+            pixels = self._decode_rawdata(det.snapshot_rawdata(), area['Width'], area['Height'])
+            images.append(pixels)
+            image_settings.append(settings)
+
+        data_server = self._detector_proxies.get('data')
+        return save_acquisition(
+            self, data_server, 'stem_image', detector_list, images,
+            dataset_attrs=image_settings, output_format=output_format,
         )
 
     def _acquire_spectrum(self, detector_name: str, exposure_time: float) -> str:

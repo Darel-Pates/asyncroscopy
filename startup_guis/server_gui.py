@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import ast
 import sys
 from pathlib import Path
 
@@ -12,8 +13,6 @@ if str(PROJECT_DIR) not in sys.path:
 # legacy Windows 10 systems that cannot load Qt6.
 from startup_guis.qt_compat import (  # noqa: E402
     HORIZONTAL,
-    NO_WRAP,
-    VERTICAL,
     QApplication,
     QCheckBox,
     QComboBox,
@@ -32,7 +31,7 @@ from startup_guis.qt_compat import (  # noqa: E402
     QWidget,
     app_exec,
 )
-from startup_guis.shared import BODY_FONT, CONFIG_DIR, GENERATED_CONFIG_DIR, SECTION_FONT, TEXT_FONT, TITLE_FONT, ManagedCommand, action_button, append_terminal_text, configure_terminal, load_yaml, write_yaml, yaml_text  # noqa: E402
+from startup_guis.shared import BODY_FONT, CONFIG_DIR, GENERATED_CONFIG_DIR, SECTION_FONT, TITLE_FONT, ManagedCommand, action_button, append_terminal_text, configure_terminal, load_yaml, write_yaml  # noqa: E402
 
 
 DEFAULT_CONFIG_PATH = CONFIG_DIR / 'Spectra300.yaml'
@@ -46,18 +45,61 @@ DEVICE_MODULES = {
     'scan': 'asyncroscopy.instruments.electron_microscope.hardware.scan',
     'stage': 'asyncroscopy.instruments.electron_microscope.hardware.stage',
 }
+INSTRUMENT_FILES = [
+    'asyncroscopy/instruments/electron_microscope/auto_script.py',
+    'asyncroscopy/instruments/electron_microscope/jeol.py',
+    'asyncroscopy/instruments/electron_microscope/digital_twin.py',
+    'asyncroscopy/instruments/scanning_probe_microscope/jupyter_api.py',
+]
+
+
+def project_path_text(path: Path | str) -> str:
+    path = Path(path)
+    if path.is_absolute():
+        try:
+            return path.relative_to(PROJECT_DIR).as_posix()
+        except ValueError:
+            return path.as_posix()
+    return path.as_posix()
+
+
+def class_name_from_file(path_text: str, fallback: str = 'Instrument') -> str:
+    path = Path(path_text).expanduser()
+    if not path.is_absolute():
+        path = PROJECT_DIR / path
+    try:
+        tree = ast.parse(path.read_text(encoding='utf-8'))
+    except OSError:
+        return fallback
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            return node.name
+    return fallback
+
+
+def uses_hardware_connection(path_text: str) -> bool:
+    return 'digital_twin' not in Path(path_text).stem
 
 
 def server_config_from_values(values: dict) -> dict:
     devices = {key: spec for key, spec in values['devices'].items() if values['enabled_devices'][key]}
-    microscope = dict(values['microscope'])
-    if values['autoscript_host']:
-        microscope['host'] = values['autoscript_host']
-    if values['autoscript_port']:
-        microscope['port'] = int(values['autoscript_port'])
+    instrument = dict(values['instrument'])
+    selected_file = project_path_text(values['instrument_file'])
+    previous_file = project_path_text(instrument.get('file', selected_file))
+    instrument['file'] = selected_file
+    if selected_file != previous_file or not instrument.get('class_name'):
+        instrument['class_name'] = class_name_from_file(selected_file)
+    instrument.pop('hardware_host', None)
+    instrument.pop('hardware_port', None)
+    uses_hardware = uses_hardware_connection(selected_file)
+    if uses_hardware and values['hardware_host']:
+        instrument['hardware_host'] = values['hardware_host']
+    if uses_hardware and values['hardware_port']:
+        instrument['hardware_port'] = int(values['hardware_port'])
+    if values['hardware_timeout_seconds']:
+        instrument['timeout_seconds'] = int(values['hardware_timeout_seconds'])
     return {
-        'microscope': microscope,
-        'digital_twin': dict(values['digital_twin']),
+        'instrument': instrument,
         'devices': devices,
         'tango': {
             'host': values['tango_host'],
@@ -69,6 +111,7 @@ def server_config_from_values(values: dict) -> dict:
             'port': int(values['tiled_port']),
             'acquisition_dir': values['acquisition_dir'],
             'autostart': values['tiled_autostart'],
+            'register_on_startup': values['tiled_register_on_startup'],
         },
         'device_timeout_seconds': int(values['device_timeout_seconds']),
     }
@@ -85,25 +128,18 @@ class ServerGui(QMainWindow):
         self.inputs: dict[str, QLineEdit | QComboBox | QCheckBox] = {}
         self.device_checks: dict[str, QCheckBox] = {}
         self.build()
-        self.refresh_yaml()
 
     def build(self) -> None:
         self.setFont(BODY_FONT)
-        root = QSplitter(VERTICAL)
-        top = QSplitter(HORIZONTAL)
+        root = QSplitter(HORIZONTAL)
         controls = QWidget()
-        preview = QWidget()
         terminal = QWidget()
-        root.addWidget(top)
+        root.addWidget(controls)
         root.addWidget(terminal)
-        top.addWidget(controls)
-        top.addWidget(preview)
-        root.setSizes([520, 240])
-        top.setSizes([520, 640])
+        root.setSizes([520, 640])
         self.setCentralWidget(root)
 
         self.build_controls(controls)
-        self.build_preview(preview)
         self.build_terminal(terminal)
 
     def build_controls(self, parent: QWidget) -> None:
@@ -119,25 +155,28 @@ class ServerGui(QMainWindow):
         database.layout().addRow('', reset_database)
         layout.addWidget(database)
 
-        microscope = self.section('Microscope')
-        mode = QComboBox()
-        mode.addItems(['real', 'dt'])
-        mode.currentTextChanged.connect(self.refresh_yaml)
-        self.inputs['microscope_mode'] = mode
-        self.add_row(microscope, 'Mode', mode)
-        default_microscope = self.default_config['microscope']
-        self.add_row(microscope, 'AutoScript host', self.line_input('autoscript_host', default_microscope.get('host', '')))
-        self.add_row(microscope, 'AutoScript port', self.line_input('autoscript_port', default_microscope.get('port', 9095)))
-        self.add_row(microscope, 'Device timeout', self.line_input('device_timeout_seconds', self.default_config.get('device_timeout_seconds', 120)))
-        layout.addWidget(microscope)
+        instrument = self.section('Instrument')
+        default_instrument = self.default_config['instrument']
+        self.add_row(instrument, 'Instrument file', self.path_input('instrument_file', default_instrument.get('file', INSTRUMENT_FILES[0]), files=INSTRUMENT_FILES))
+        self.add_row(instrument, 'Hardware host', self.line_input('hardware_host', default_instrument.get('hardware_host', '')))
+        self.add_row(instrument, 'Hardware port', self.line_input('hardware_port', default_instrument.get('hardware_port', 9095)))
+        self.add_row(instrument, 'Timeout (seconds)', self.line_input('hardware_timeout_seconds', default_instrument.get('timeout_seconds', 120)))
+        self.add_row(instrument, 'Device startup timeout', self.line_input('device_timeout_seconds', self.default_config.get('device_timeout_seconds', 120)))
+        layout.addWidget(instrument)
 
         tiled = self.default_config['tiled']
         data_server = self.section('Data server')
         self.add_row(data_server, 'Tiled host', self.line_input('tiled_host', tiled.get('host', 'localhost')))
         self.add_row(data_server, 'Tiled port', self.line_input('tiled_port', tiled.get('port', 9091)))
-        self.add_row(data_server, 'Acquisition dir', self.line_input('acquisition_dir', tiled.get('acquisition_dir', 'outputs/tiled_acquisitions')))
+        self.add_row(data_server, 'Acquisition dir', self.path_input('acquisition_dir', tiled.get('acquisition_dir', 'outputs/tiled_acquisitions'), directory=True))
         autostart = self.check_input('tiled_autostart', 'Start Tiled HTTP server', bool(tiled.get('autostart', True)))
         data_server.layout().addRow('', autostart)
+        register_on_startup = self.check_input(
+            'tiled_register_on_startup',
+            'Register acquisition directory on startup (slow for large folders)',
+            bool(tiled.get('register_on_startup', False)),
+        )
+        data_server.layout().addRow('', register_on_startup)
         layout.addWidget(data_server)
 
         devices = QGroupBox('Devices')
@@ -165,17 +204,6 @@ class ServerGui(QMainWindow):
             actions.addWidget(button)
         layout.addLayout(actions)
         layout.addStretch()
-
-    def build_preview(self, parent: QWidget) -> None:
-        layout = QVBoxLayout(parent)
-        label = QLabel('Configuration (.yaml)')
-        label.setFont(SECTION_FONT)
-        layout.addWidget(label)
-        self.yaml_preview = QTextEdit()
-        self.yaml_preview.setFont(TEXT_FONT)
-        self.yaml_preview.setReadOnly(True)
-        self.yaml_preview.setLineWrapMode(NO_WRAP)
-        layout.addWidget(self.yaml_preview)
 
     def build_terminal(self, parent: QWidget) -> None:
         layout = QVBoxLayout(parent)
@@ -208,29 +236,67 @@ class ServerGui(QMainWindow):
         self.inputs[key] = widget
         return widget
 
+    def path_input(self, key: str, value, files: list[str] | None = None, directory: bool = False) -> QWidget:
+        row = QWidget()
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        combo = QComboBox()
+        combo.setEditable(True)
+        combo.addItems(files or [str(value)])
+        combo.setCurrentText(project_path_text(value))
+        combo.currentTextChanged.connect(self.refresh_yaml)
+        browse = QPushButton('Browse')
+        browse.clicked.connect(lambda: self.browse_path(combo, directory))
+        layout.addWidget(combo)
+        layout.addWidget(browse)
+        self.inputs[key] = combo
+        return row
+
+    def browse_path(self, combo: QComboBox, directory: bool) -> None:
+        if directory:
+            path = QFileDialog.getExistingDirectory(self, 'Select directory', combo.currentText())
+        else:
+            path, _ = QFileDialog.getOpenFileName(self, 'Select Python file', str(PROJECT_DIR), 'Python (*.py);;All files (*)')
+        if path:
+            combo.setCurrentText(project_path_text(path))
+
+    def input_text(self, key: str) -> str:
+        widget = self.inputs[key]
+        if hasattr(widget, 'currentText'):
+            return widget.currentText()
+        return widget.text()
+
+    def set_input_text(self, key: str, value) -> None:
+        widget = self.inputs[key]
+        text = str(value)
+        if hasattr(widget, 'setCurrentText'):
+            widget.setCurrentText(project_path_text(text))
+            return
+        widget.setText(text)
+
     def current_config(self) -> dict:
         values = {
-            'microscope_mode': self.inputs['microscope_mode'].currentText(),
-            'autoscript_host': self.inputs['autoscript_host'].text(),
-            'autoscript_port': self.inputs['autoscript_port'].text(),
-            'tango_host': self.inputs['tango_host'].text(),
-            'tango_port': self.inputs['tango_port'].text(),
+            'instrument_file': self.input_text('instrument_file'),
+            'hardware_host': self.input_text('hardware_host'),
+            'hardware_port': self.input_text('hardware_port'),
+            'hardware_timeout_seconds': self.input_text('hardware_timeout_seconds'),
+            'tango_host': self.input_text('tango_host'),
+            'tango_port': self.input_text('tango_port'),
             'reset_database_file': self.inputs['reset_database_file'].isChecked(),
-            'tiled_host': self.inputs['tiled_host'].text(),
-            'tiled_port': self.inputs['tiled_port'].text(),
-            'acquisition_dir': self.inputs['acquisition_dir'].text(),
+            'tiled_host': self.input_text('tiled_host'),
+            'tiled_port': self.input_text('tiled_port'),
+            'acquisition_dir': self.input_text('acquisition_dir'),
             'tiled_autostart': self.inputs['tiled_autostart'].isChecked(),
-            'device_timeout_seconds': self.inputs['device_timeout_seconds'].text(),
+            'tiled_register_on_startup': self.inputs['tiled_register_on_startup'].isChecked(),
+            'device_timeout_seconds': self.input_text('device_timeout_seconds'),
             'enabled_devices': {key: checkbox.isChecked() for key, checkbox in self.device_checks.items()},
             'devices': {key: self.device_config.get(key, {'module_name': DEVICE_MODULES[key]}) for key in DEVICE_MODULES},
-            'microscope': self.default_config['microscope'],
-            'digital_twin': self.default_config.get('digital_twin', {}),
+            'instrument': self.default_config['instrument'],
         }
         return server_config_from_values(values)
 
     def refresh_yaml(self) -> None:
-        if hasattr(self, 'yaml_preview'):
-            self.yaml_preview.setPlainText(yaml_text(self.current_config()))
+        pass
 
     def save_config(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, 'Save config', str(CONFIG_DIR / 'server_config.yaml'), 'YAML (*.yaml *.yml);;All files (*)')
@@ -245,19 +311,22 @@ class ServerGui(QMainWindow):
         config = load_yaml(Path(path))
         self.default_config = config
         self.device_config = config.get('devices', {})
-        microscope = config.get('microscope', {})
+        instrument = config.get('instrument', {})
         tango = config.get('tango', {})
         tiled = config.get('tiled', {})
-        self.inputs['autoscript_host'].setText(str(microscope.get('host', '')))
-        self.inputs['autoscript_port'].setText(str(microscope.get('port', '')))
-        self.inputs['tango_host'].setText(str(tango.get('host', 'localhost')))
-        self.inputs['tango_port'].setText(str(tango.get('port', 9094)))
+        self.set_input_text('instrument_file', instrument.get('file', INSTRUMENT_FILES[0]))
+        self.set_input_text('hardware_host', instrument.get('hardware_host', ''))
+        self.set_input_text('hardware_port', instrument.get('hardware_port', ''))
+        self.set_input_text('hardware_timeout_seconds', instrument.get('timeout_seconds', 120))
+        self.set_input_text('tango_host', tango.get('host', 'localhost'))
+        self.set_input_text('tango_port', tango.get('port', 9094))
         self.inputs['reset_database_file'].setChecked(bool(tango.get('reset_database_file', False)))
-        self.inputs['tiled_host'].setText(str(tiled.get('host', 'localhost')))
-        self.inputs['tiled_port'].setText(str(tiled.get('port', 9091)))
-        self.inputs['acquisition_dir'].setText(tiled.get('acquisition_dir', 'outputs/tiled_acquisitions'))
+        self.set_input_text('tiled_host', tiled.get('host', 'localhost'))
+        self.set_input_text('tiled_port', tiled.get('port', 9091))
+        self.set_input_text('acquisition_dir', tiled.get('acquisition_dir', 'outputs/tiled_acquisitions'))
         self.inputs['tiled_autostart'].setChecked(bool(tiled.get('autostart', True)))
-        self.inputs['device_timeout_seconds'].setText(str(config.get('device_timeout_seconds', 120)))
+        self.inputs['tiled_register_on_startup'].setChecked(bool(tiled.get('register_on_startup', False)))
+        self.set_input_text('device_timeout_seconds', config.get('device_timeout_seconds', 120))
         for key, checkbox in self.device_checks.items():
             checkbox.setChecked(key in self.device_config)
         self.refresh_yaml()
@@ -265,7 +334,7 @@ class ServerGui(QMainWindow):
 
     def start(self) -> None:
         config_path = write_yaml(GENERATED_CONFIG_PATH, self.current_config())
-        self.command.start(['uv', 'run', 'python', '-u', 'startup_scripts/run_servers.py', '--yaml', str(config_path), '--microscope', self.inputs['microscope_mode'].currentText()])
+        self.command.start(['uv', 'run', 'python', '-u', 'startup_scripts/run_servers.py', '--yaml', str(config_path)])
 
     def enqueue_output(self, text: str) -> None:
         append_terminal_text(self.output, text)

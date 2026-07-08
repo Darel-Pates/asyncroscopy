@@ -1,22 +1,10 @@
-# Default asyncroscopy server config — Thermo Fisher Spectra 300 TEM.
-# Read by startup_scripts/run_servers.py. Values here reproduce the script's historic
-# built-in defaults, so a headless start equals accepting every prompt.
-#
-#   uv run startup_scripts/run_servers.py --yaml configs/Spectra300.yaml            # real, headless
-#   uv run startup_scripts/run_servers.py --yaml configs/Spectra300.yaml --microscope dt
-
-microscope:
+instrument:
   class_name: AutoScriptMicroscope
-  module_name: asyncroscopy.instruments.electron_microscope.auto_script
+  file: asyncroscopy/instruments/electron_microscope/auto_script.py
   description: "Thermo Fisher Spectra 300 TEM"
-  host: 10.46.217.241        # AutoScript endpoint -> microscope's autoscript_host_ip / _port
-  port: 9095
-
-digital_twin:
-  class_name: DigitalTwin
-  module_name: asyncroscopy.instruments.electron_microscope.digital_twin
-  description: "Software digital twin"
-  # No host/port: the bundled twin needs no AutoScript endpoint.
+  hardware_host: 10.46.217.241
+  hardware_port: 9095
+  timeout_seconds: 120
 
 # Support device servers. class_name defaults to the key upper-cased
 # (camera -> CAMERA); add `class_name:` to a device only to override that.
@@ -39,5 +27,6 @@ tiled:
   port: 9091
   acquisition_dir: outputs/tiled_acquisitions
   autostart: true
+  register_on_startup: false
 
 device_timeout_seconds: 120

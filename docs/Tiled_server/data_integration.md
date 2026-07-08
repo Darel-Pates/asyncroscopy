@@ -12,6 +12,12 @@ Image acquisitions can instead write `.tiff` (Velox-compatible, one file per
 detector) via `scan.output_format = ".tiff"`; spectra and STEM data are always
 HDF5.
 
+Vendors return two shapes and `save_acquisition` absorbs both: AutoScript adorned
+images bundle pixels and metadata, while PyJEM (JEOL) returns raw pixels plus a
+separate `get_detectorsetting()` dict passed as `dataset_attrs`. Metadata lands as
+HDF5 attributes for `.h5`; for `.tiff`, adorned images save it natively while
+raw-array vendors get the dict json-encoded into the TIFF `ImageDescription` tag.
+
 Acquisition commands that feed this pipeline include `acquire_scanned_image`,
 `acquire_spectrum`, `acquire_camera_image`, `acquire_flucam_image`, and
 `acquire_scanned_data_advanced`.

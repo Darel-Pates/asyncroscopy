@@ -3,18 +3,13 @@
 #
 #   uv run startup_scripts/run_servers.py --yaml configs/ThinkPad-utkarsh-covalent-setup.yaml
 
-microscope:
+instrument:
   class_name: AutoScriptMicroscope
-  module_name: asyncroscopy.instruments.electron_microscope.auto_script
+  file: asyncroscopy/instruments/electron_microscope/auto_script.py
   description: "Local Spectra 300 against a localhost AutoScript server"
-  host: localhost
-  port: 9095
-
-digital_twin:
-  class_name: DigitalTwin
-  module_name: asyncroscopy.instruments.electron_microscope.digital_twin
-  description: "Software digital twin"
-  # No host/port: the bundled twin needs no AutoScript endpoint.
+  hardware_host: localhost
+  hardware_port: 9095
+  timeout_seconds: 120
 
 devices:
   camera:    { module_name: asyncroscopy.instruments.electron_microscope.detectors.camera }
@@ -35,5 +30,6 @@ tiled:
   port: 9091
   acquisition_dir: outputs/tiled_acquisitions
   autostart: true
+  register_on_startup: false
 
 device_timeout_seconds: 120

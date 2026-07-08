@@ -3,7 +3,7 @@
 `startup_scripts/run_servers.py` starts the Tango/device side of asyncroscopy. It
 clears stale processes, starts the Tango database, registers devices, launches
 device servers, starts the DATA-managed Tiled HTTP server, and starts the
-microscope or digital twin last.
+selected instrument last.
 
 MCP is started separately with `startup_scripts/run_mcp.py`; see
 [mcp_server.md](../MCP/mcp_server.md).
@@ -12,10 +12,9 @@ MCP is started separately with `startup_scripts/run_mcp.py`; see
 
 ```bash
 uv run startup_scripts/run_servers.py
-uv run startup_scripts/run_servers.py --microscope dt
 
 uv run startup_scripts/run_servers.py --yaml configs/Spectra300.yaml
-uv run startup_scripts/run_servers.py --yaml configs/Spectra300.yaml --microscope dt
+uv run startup_scripts/run_servers.py --yaml configs/STEMDigitalTwin.yaml
 uv run startup_scripts/run_servers.py --yaml configs/ThinkPad-utkarsh-covalent-setup.yaml
 ```
 
@@ -40,11 +39,11 @@ uv run startup_scripts/run_mcp.py --yaml configs/mcp.yaml
 |-------|-----------|------------|
 | 1 | support devices | `asyncroscopy/{camera,corrector,data,eds,flucam,scan,stage}/default` |
 | 2 | Tiled HTTP server | started through the `data` device |
-| 3 | microscope or digital twin | `asyncroscopy/microscope/default` |
+| 3 | instrument | `asyncroscopy/instrument/default` |
 
-The microscope starts last because it depends on the support devices. The runner
-writes support-device addresses into Tango database properties before the
-microscope starts. In `real` mode it also writes the AutoScript host and port.
+The instrument starts last because it depends on the support devices. The runner
+writes support-device addresses and hardware connection values into Tango
+database properties before the instrument starts.
 
 ## Server GUI
 
@@ -53,7 +52,7 @@ does not start servers directly. It formats the current selections into YAML,
 writes that YAML to `outputs/startup_configs/server_gui.yaml`, and runs:
 
 ```bash
-uv run python startup_scripts/run_servers.py --yaml outputs/startup_configs/server_gui.yaml --microscope <real-or-dt>
+uv run python startup_scripts/run_servers.py --yaml outputs/startup_configs/server_gui.yaml
 ```
 
 The GUI includes:
@@ -74,16 +73,15 @@ Server startup configs live in [configs/](../../configs):
 
 Each server config has:
 
-- `microscope:` for the real microscope.
-- `digital_twin:` for `--microscope dt`.
+- `instrument:` for the selected instrument class, Python file, and hardware connection values.
 - `devices:` for support device modules.
 - `tango:` for the Tango database host, port, and optional database-file reset.
 - `tiled:` for the DATA-managed Tiled HTTP server.
 - `device_timeout_seconds:` for device readiness waits.
 
 Device `class_name` defaults to the upper-cased key (`scan` becomes `SCAN`).
-`microscope.host` and `microscope.port` become the microscope device's
-`autoscript_host_ip` and `autoscript_host_port` properties.
+`instrument.hardware_host`, `instrument.hardware_port`, and
+`instrument.timeout_seconds` become instrument device properties.
 
 Set `tango.reset_database_file: true` to delete a stale local
 `tango_database.db` / `Tango_database.db` before starting the Tango database.
@@ -118,18 +116,18 @@ Interactive mode is used only when `--yaml` is omitted. The defaults come from
 | Start Tiled HTTP server | Whether DATA starts its managed Tiled server. |
 | Clear old processes first | Frees stale Tango/Tiled ports and old device servers. |
 | Start Tango database | Starts the DB or waits for an existing one. |
-| Register devices | Adds device entries and microscope properties to the DB. |
+| Register devices | Adds device entries and instrument properties to the DB. |
 | Device startup timeout seconds | How long to wait for each device to answer `ping()`. |
-| AutoScript host IP / port | Real microscope mode only. |
+| Hardware host / port / timeout seconds | Connection values for the selected instrument. |
 
 ## Startup Stages
 
 1. **Clearing old processes** frees the database/Tiled ports and kills old device
    server process groups.
 2. **Starting Tango database** starts or waits for the database server.
-3. **Registering devices** writes device entries and microscope properties.
+3. **Registering devices** writes device entries and instrument properties.
 4. **Starting device servers** starts support devices, Tiled, and then the
-   microscope or digital twin.
+   selected instrument.
 5. **Startup summary** prints `TANGO_HOST`, PIDs, ready times, and the Tiled URI.
 
 ## Manual Fallback
@@ -141,7 +139,7 @@ TANGO_HOST=localhost:9094 uv run python -m tango.databaseds.database 2
 
 export TANGO_HOST=localhost:9094
 uv run python -m asyncroscopy.instruments.electron_microscope.hardware.scan scan_instance
-uv run python -m asyncroscopy.instruments.electron_microscope.auto_script microscope_instance
+uv run python -m asyncroscopy.instruments.electron_microscope.auto_script instrument_instance
 ```
 
 Manual device startup requires the devices to already be registered in Tango.

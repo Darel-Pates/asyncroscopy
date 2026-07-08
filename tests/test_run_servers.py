@@ -9,12 +9,17 @@ class FakeDataProxy:
     def __init__(self):
         self.timeout_millis = None
         self.stop_called = False
+        self.register_called = False
 
     def set_timeout_millis(self, timeout_millis):
         self.timeout_millis = timeout_millis
 
     def stop_tiled_server(self):
         self.stop_called = True
+
+    def register_save_path(self):
+        self.register_called = True
+        return '{"registered_path": "outputs/tiled_acquisitions"}'
 
 
 def test_get_data_proxy_sets_extended_timeout(monkeypatch):
@@ -33,6 +38,17 @@ def test_stop_tiled_server_uses_extended_data_proxy_timeout(monkeypatch):
 
     assert proxy.timeout_millis == run_servers.TILED_COMMAND_TIMEOUT_MILLIS
     assert proxy.stop_called is True
+
+
+def test_register_tiled_save_path_uses_startup_registration_timeout(monkeypatch):
+    proxy = FakeDataProxy()
+    monkeypatch.setattr(run_servers.tango, "DeviceProxy", lambda _: proxy)
+
+    result = run_servers.register_tiled_save_path()
+
+    assert proxy.timeout_millis == run_servers.TILED_STARTUP_REGISTRATION_TIMEOUT_MILLIS
+    assert proxy.register_called is True
+    assert result == {"registered_path": "outputs/tiled_acquisitions"}
 
 
 def test_start_process_tracks_process_group(monkeypatch):
@@ -85,6 +101,32 @@ def test_start_process_drains_child_output():
     assert process.stderr_lines[-1] == "done"
 
 
+def test_start_process_can_write_child_output_to_debug_log(tmp_path):
+    environment = {**os.environ, 'PYTHONUNBUFFERED': '1'}
+    command = [
+        sys.executable,
+        '-c',
+        "import sys\nprint('log-line', file=sys.stderr)",
+    ]
+
+    process = run_servers.start_process('writer', 'Writer', command, environment, tmp_path)
+    assert process.log_path == tmp_path / 'writer.log'
+
+    try:
+        process.process.wait(timeout=5)
+        deadline = time.monotonic() + 2
+        while not process.log_path.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        while 'log-line' not in process.log_path.read_text(encoding='utf-8') and time.monotonic() < deadline:
+            time.sleep(0.01)
+    finally:
+        if process.running:
+            run_servers.stop_process(process)
+
+    log_text = process.log_path.read_text(encoding='utf-8')
+    assert '[stderr] log-line' in log_text
+
+
 def test_stop_process_terminates_process_group(monkeypatch):
     if run_servers.os.name == "nt":
         return
@@ -131,8 +173,22 @@ def test_load_spectra300_config_starts_servers_only():
 
     assert config.tango_host == "10.46.217.241"
     assert config.tiled.host == "10.46.217.241"
+    assert config.tiled.register_on_startup is False
+    assert config.instrument.class_name == "AutoScriptMicroscope"
+    assert config.instrument.module_name == "asyncroscopy.instruments.electron_microscope.auto_script"
     assert config.reset_database_file is False
     assert not hasattr(config, "mcp")
+
+
+def test_build_devices_adds_selected_instrument():
+    config = run_servers.load_config(run_servers.PROJECT_DIR / "configs" / "DigitalTwin.yaml")
+
+    devices = run_servers.build_devices(config)
+
+    assert devices[-1].key == "instrument"
+    assert devices[-1].class_name == "DigitalTwin"
+    assert devices[-1].module_name == "asyncroscopy.instruments.electron_microscope.digital_twin"
+    assert devices[-1].device_name == "asyncroscopy/instrument/default"
 
 
 def test_load_mcp_config():

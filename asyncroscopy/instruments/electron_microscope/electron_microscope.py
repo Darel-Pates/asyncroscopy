@@ -123,7 +123,7 @@ class ElectronMicroscope(Instrument):
     def acquire_scanned_image(self, detector_list: list[str] = ['haadf']) -> str:
         """Acquire an image with scanning detectors and return its DATA/Tiled key."""
         scan = self._detector_proxies.get('scan')
-        return self._acquire_scanned_image(scan.imsize, scan.dwell_time, detector_list, list(scan.scan_region))
+        return self._acquire_scanned_image(scan.imsize, scan.dwell_time, detector_list, list(scan.scan_region), scan.output_format)
 
     @command(dtype_out=str)
     def acquire_scanned_data_advanced(self) -> str:
@@ -245,6 +245,7 @@ class ElectronMicroscope(Instrument):
         dwell_time: float,
         detector_list: list[str] = ['haadf'],
         scan_region: list[float] = [0.0, 0.0, 1.0, 1.0],
+        output_format: str = '.h5',
     ) -> str:
         """Vendor-specific scanned image acquisition implementation."""
         pass
