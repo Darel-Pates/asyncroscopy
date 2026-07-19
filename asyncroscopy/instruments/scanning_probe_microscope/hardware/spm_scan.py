@@ -12,9 +12,7 @@ Writes are pushed to hardware and read back.
 
 from abc import abstractmethod
 
-import tango
-# from tango import AttrWriteType, DevState, DevVarFloatArray
-# from tango.server import attribute, command, device_property
+import tango #type: ignore
 
 from asyncroscopy.data.data_writer import save_acquisition
 from asyncroscopy.instruments.instrument import CombinedMeta

@@ -17,8 +17,6 @@ import json
 from abc import abstractmethod
 
 import tango
-# from tango import AttrWriteType, DevFloat, DevVarFloatArray
-# from tango.server import attribute, command, device_property
 
 from asyncroscopy.instruments.instrument import Instrument
 
@@ -59,22 +57,30 @@ class SPMMicroscope(Instrument):
     
     feedback_device_address = tango.server.device_property(
         dtype=str,
-        doc="Tango device address for the FEEDBACK device.",
+        doc="Tango device address for the FEEDBACK device."
+        "DB mode: 'asyncroscopy/feedback/default' "
+        "No-DB mode: 'tango://127.0.0.1:8888/asyncroscopy/feedback/default#dbase=no'",
     )
 
     approach_device_address = tango.server.device_property(
         dtype=str,
-        doc="Tango device address for the APPROACH device.",
+        doc="Tango device address for the APPROACH device."
+        "DB mode: 'asyncroscopy/approach/default' "
+        "No-DB mode: 'tango://127.0.0.1:8888/asyncroscopy/approach/default#dbase=no'",
     )
 
     stage_device_address = tango.server.device_property(
         dtype=str,
-        doc="Tango device address for the STAGE device.",
+        doc="Tango device address for the STAGE device."
+        "DB mode: 'asyncroscopy/stage/default' "
+        "No-DB mode: 'tango://127.0.0.1:8888/asyncroscopy/stage/default#dbase=no'",
     )
 
     spectroscopy_device_address = tango.server.device_property(
         dtype=str,
-        doc="Tango device address for the SPECTROSCOPY device.",
+        doc="Tango device address for the SPECTROSCOPY device."
+        "DB mode: 'asyncroscopy/spectroscopy/default' "
+        "No-DB mode: 'tango://127.0.0.1:8888/asyncroscopy/spectroscopy/default#dbase=no'",
     )
 
     # ------------------------------------------------------------------
