@@ -458,7 +458,6 @@ class TestMCPServerTypeMapping:
 class TestMCPToolInvocation:
     def test_wrapper_supports_positional_and_keyword(self, monkeypatch) -> None:
         # Mock Database and DeviceProxy to avoid connection errors
-        # Must patch where it is used (imported)
         monkeypatch.setattr("asyncroscopy.mcp.mcp_server.Database", lambda host, port: None)
 
         # Mock objects for wrapping
@@ -471,7 +470,7 @@ class TestMCPToolInvocation:
             {
                 "in_type": tango.CmdArgType.DevString,
                 "out_type": tango.CmdArgType.DevString,
-                "in_type_desc": "some string",
+                "in_type_desc": ":param config_json: (not documented)\n:type config_json: DevString",
                 "out_type_desc": "result",
             },
         )
@@ -486,8 +485,8 @@ class TestMCPToolInvocation:
         import inspect
 
         sig = inspect.signature(wrapper)
-        param_name = list(sig.parameters.keys())[0]
-        assert param_name == "arg"
+        param_name = list(sig.parameters.keys())[0]        
+        assert param_name == "config_json" 
         assert wrapper(**{param_name: "world"}) == "world"
 
     def test_void_wrapper_supports_no_args(self, monkeypatch) -> None:

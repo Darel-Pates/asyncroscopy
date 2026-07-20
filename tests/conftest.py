@@ -21,7 +21,7 @@ from asyncroscopy.instruments.electron_microscope.detectors.camera import CAMERA
 from asyncroscopy.instruments.electron_microscope.detectors.eds import EDS
 from asyncroscopy.instruments.electron_microscope.detectors.flucam import FLUCAM
 from asyncroscopy.instruments.electron_microscope.hardware.scan import SCAN
-from asyncroscopy.instruments.electron_microscope.hardware.stage import STAGE
+from asyncroscopy.instruments.electron_microscope.hardware.TestStage import TestStage
 from asyncroscopy.instruments.electron_microscope.digital_twin import DigitalTwin
 from asyncroscopy.instruments.electron_microscope.auto_script import AutoScriptMicroscope
 from asyncroscopy.data.data import DATA
@@ -87,7 +87,7 @@ def tango_ctx(data_save_dir):
             ],
         },
         {
-            "class": STAGE,
+            "class": TestStage,
             "devices": [
                 {
                     "name": "asyncroscopy/stage/default",

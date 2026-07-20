@@ -3,6 +3,7 @@
 import argparse
 import base64
 import inspect
+import re
 import json
 import traceback
 from pathlib import Path
@@ -260,6 +261,7 @@ class MCPServer:
         Returns:
             A wrapper function with a proper signature
         """
+
         in_type = cmd_info.in_type
         py_type = self._tango_type_to_python(in_type)
         in_desc = cmd_info.in_type_desc
@@ -278,33 +280,59 @@ class MCPServer:
             doc_lines.append(f"Output Description: {cmd_info.out_type_desc}")
         doc = "\n".join(doc_lines)
 
+        # Get parameter name from docstring description text
+        param_name = "arg"
+        if in_desc:
+            match = re.search(r'(?::param|@param)\s+(\w+):', in_desc)
+            if match:
+                param_name = match.group(1)
+                print(param_name)
+
         if in_desc and in_desc.lower() not in (
             "uninitialised",
             "none",
             "",
             "uninitialized",
         ):
-            # Sanitize description - remove newlines to prevent JSON schema breakage
+            # Sanitize description
             clean_desc = in_desc.replace("\n", " ").strip()
             arg_type = Annotated[py_type, Field(description=clean_desc)]
         else:
             arg_type = py_type
 
         if in_type == CmdArgType.DevVoid:
-
             def wrapper():
                 result = func()
                 return self._normalize_command_result(out_type, result)
 
             params = []
+            
+        elif py_type == dict:
+            # For commands taking a dictionary (like DevEncoded), allow arbitrary keyword arguments.
+            def wrapper(**kwargs):
+                if "arg" in kwargs and len(kwargs) == 1 and isinstance(kwargs["arg"], dict):
+                    arg_input = kwargs["arg"]
+                else:
+                    arg_input = kwargs
+                
+                result = func(arg_input)
+                return self._normalize_command_result(out_type, result)
+
+            # Use VAR_KEYWORD (**kwargs) to make Pydantic accept any incoming fields
+            params = [inspect.Parameter("kwargs", inspect.Parameter.VAR_KEYWORD)]
+            
         else:
-            def wrapper(arg):
+            # Scalars and standard arrays
+            def wrapper(*args, **kwargs):
+                # Get first positional arg or parameter name out of kwargs
+                arg = args[0] if args else kwargs.get(param_name)
                 result = func(arg)
                 return self._normalize_command_result(out_type, result)
 
-            params = [inspect.Parameter("arg", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=arg_type)]
+            params = [inspect.Parameter(param_name, inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=arg_type)]
 
-        wrapper.__annotations__ = {p.name: p.annotation for p in params}
+        # Build annotations, omitting VAR_KEYWORD parameters so Pydantic safely allows dynamic extra fields
+        wrapper.__annotations__ = {p.name: p.annotation for p in params if p.kind != inspect.Parameter.VAR_KEYWORD}
         wrapper.__annotations__["return"] = py_return_type
 
         wrapper.__signature__ = inspect.Signature(parameters=params, return_annotation=py_return_type)
@@ -346,7 +374,7 @@ class MCPServer:
                 continue
 
             for cmd in commands:
-                command_name = cmd.cmd_name if hasattr(cmd, "cmd_name") else str(cmd)
+                command_name = cmd.cmd_name
                 global_blocks = self.blocked_functions.get("*", [])
                 if command_name in global_blocks or f"{dev_class}.{command_name}" in global_blocks or command_name in self.blocked_functions.get(dev_class, []):
                     continue

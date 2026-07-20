@@ -16,8 +16,8 @@ Real AutoScript image commands save the adorned object on disk and return the
 DATA/Tiled unique id for that saved acquisition.
 """
 
-import math
 import time
+import json
 
 import numpy as np
 import tango
@@ -31,6 +31,7 @@ from asyncroscopy.data.data_writer import DEFAULT_ACQUISITION_DIR, save_acquisit
 # Wrapped in try/except so the device can still be imported and tested
 # on a development machine without AutoScript installed.
 try:
+    import autoscript_tem_microscope_client
     from autoscript_tem_microscope_client import TemMicroscopeClient
     from autoscript_tem_microscope_client.enumerations import EdsDetectorType
     from autoscript_tem_microscope_client.enumerations import CameraType, RegionCoordinateSystem, ExposureTimeType
@@ -349,9 +350,19 @@ class AutoScriptMicroscope(ElectronMicroscope):
 
     def _get_defocus(self) -> float:
         """Get defocus in meters."""
-        return self._microscope.optics.defocus
+        return float(self._microscope.optics.defocus)
+    
+    def _set_screen(self, position: str)->None:
+        if position.lower() in ['in', 'insert', 'inserted']:
+            if self._microscope.detectors.screen.position == 'Retracted':
+                self._microscope.detectors.screen.insert()
+        elif position.lower() in ['out', 'retract', 'retracted']:
+             if self._microscope.detectors.screen.position == 'Inserted':
+                self._microscope.detectors.screen.retract()
 
-    def _caibrate_screen_current(self) -> None:
+
+    def _calibrate_screen_current(self) -> None:
+        """ calibrate screen current with monchromator focus"""
         original_gun_lens = self._microscope.optics.monochromator.focus
         gun_lens_series = np.linspace(10, 150, 15)
 
@@ -381,7 +392,7 @@ class AutoScriptMicroscope(ElectronMicroscope):
             self._microscope.optics.monochromator.focus = float(x_real)
         else:
             self.warn_stream("Screen current calibration not available. running calibration (should take 15 seconds).")
-            self._caibrate_screen_current()
+            self._calibrate_screen_current()
 
             poly_func = self.screen_current_calibration
             adjusted_poly = poly_func - current
@@ -413,39 +424,111 @@ class AutoScriptMicroscope(ElectronMicroscope):
             return position
         else:
             return position[:4]
+        
+    
+    def _get_parameters(self):
+        status = {'system': self._microscope.service.system.name,
+                'vacuum': self._microscope.vacuum.state,
+                'column_valves': self._microscope.vacuum.column_valves.state,
+                'is_accelerator_on': self._microscope.optics.is_accelerator_on,
+                'acceleration_voltage': self._microscope.optics.acceleration_voltage.value,
+                'optical_mode': self._microscope.optics.optical_mode,
+                'illumination_mode': self._microscope.optics.illumination_mode,
+                'objective_lens_mode': self._microscope.optics.objective_lens_mode,
+                'projector_mode': self._microscope.optics.projector_mode,
+                #'convergence_angle': self._microscope.optics.convergence_angle,
+                'spot_size': self._microscope.optics.spot_size_index,
+                'beam_stopper': self._microscope.optics.beam_stopper.insertion_state,
+                'beam_blanker': self._microscope.optics.blanker.is_beam_blanked,
+                'is_eftem_on': self._microscope.optics.is_eftem_on,
+                }
+        if self._microscope.optics.optical_mode == 'Stem':
+            status['scan_rotation'] = self._microscope.optics.scan_rotation
+            status['scan_field_of_view'] = self._microscope.optics.scan_field_of_view
+        for mechanism_type in self._microscope.optics.aperture_mechanisms.get_available():
+            mechanism = self._microscope.optics.aperture_mechanisms.get_mechanism(mechanism_type)   
+            if not mechanism.is_enabled:
+                status[mechanism_type] = 'Disabled'
+            elif mechanism.insertion_state == 'Retracted':
+                status[mechanism_type] = 'Retracted'
+            else:
+                status[mechanism_type] = mechanism.aperture.name  
+        for deflector in self._microscope.optics.deflectors.get_available_deflectors():  
+            defl = self._microscope.optics.deflectors.get_deflector_value(deflector) 
+            status[deflector] = [defl.x, defl.y]              
+
+        return json.dumps(status)
+
+    def _get_stage(self):
+        """Get the current stage position as [x, y, z, alpha, beta], with tilts in degrees."""
+        # set proxy attributes with current stage position
+        stage = self._detector_proxies["stage"]
+        return stage.position
 
     def _move_stage(self, position) -> None:
-        """Move stage to specified position [x, y, z, alpha, beta]."""
-        # TODO: add beta value check
-
-        x = float(position[0])
-        y = float(position[1])
-        z = float(position[2])
-        alpha = float(math.radians(position[3]))
-
-        if len(position) > 4 and position[4] is not None:
-            beta = float(math.radians(position[4]))
-        else:
-            beta = None
-
-        self._microscope.specimen.stage.absolute_move((x, y, z, alpha, beta))
-        self._get_stage()  # link the proxy with real state
+        """Move stage to [x, y, z, alpha, beta], with x/y/z in meters and tilts in degrees."""
+        stage_proxy = self._detector_proxies.get("stage")
+        stage_proxy.position = position  # expects [x, y, z, alpha, beta] in meters and degrees
 
     def _auto_focus(self):
         """Perform autofocus routine C1A1"""
-        settings = RunOptiStemSettings(method="C1A1")  # method=OptiStemMethod.C1_A1, dwell_time=2e-06, cutoff_in_pixels=5)
-        self._microscope.auto_functions.run_opti_stem(settings)
+        if self._microscope.optics.optical_mode == 'Stem':
+            settings = RunOptiStemSettings(method="C1A1")
+            self._microscope.auto_functions.run_opti_stem(settings)
+        else:
+            settings = autoscript_tem_microscope_client.structuresRunObjectiveAutoStigmatorSettings(camera_detector="Flucam")
+            self.microscope.auto_functions.run_objective_auto_stigmator(settings)
 
     def _set_image_shift(self, shift):
         """Apply image shift in meters."""
         x_shift = float(shift[0])
         y_shift = float(shift[1])
         try:
-            self._microscope.optics.deflectors.beam_shift = (x_shift, y_shift)
+            if self._microscope.optics.optical_mode == 'Stem':
+                self._microscope.optics.deflectors.beam_shift = (x_shift, y_shift)
+            else:
+                self._microscope.optics.deflectors.image_shift = (x_shift, y_shift)
         except Exception as e:
-            self.error_stream(f"Failed to set beam shift: {e}")
+            self.error_stream(f"Failed to set image shift: {e}")
 
+    def _set_diffraction_shift(self, shift):
+        """Apply image shift in meters."""
+        x_shift = float(shift[0])
+        y_shift = float(shift[1])
+        try:
+            if self._microscope.optics.projector_mode == 'Diffraction':
+                self._microscope.optics.deflectors.image_shift = (x_shift, y_shift)
+        except Exception as e:
+            self.error_stream(f"Failed to set diffraction shift: {e}")
+    
+    def _get_diffraction_shift(self):
+        if self._microscope.optics.optical_mode == 'Diffraction':
+            position = self._microscope.optics.deflectors.image_shift
+            return np.array([position.x, position.y])
+        else:
+            return np.array([0, 0])
+    
+    
+    def _get_image_shift(self):
+        if self._microscope.optics.optical_mode == 'Stem':
+            position = self._microscope.optics.deflectors.beam_shift
+        else:
+            position = self._microscope.optics.deflectors.image_shift
+        return np.array([position.x, position.y])
+    
+    def _get_beam_tilt(self):
+        tilt = self._microscope.optics.deflectors.beam_tilt
+        return np.array([tilt .x, tilt.y])
 
+    def _set_beam_tilt(self, tilt):
+        """Apply beam tilt in radians."""
+        x_tilt = float(tilt[0])
+        y_tilt = float(tilt[1])
+        try:
+            self._microscope.optics.deflectors.beam_tilt = (x_tilt, y_tilt)
+        except Exception as e:
+            self.error_stream(f"Failed to set beam tilt: {e}")
+    
 # ----------------------------------------------------------------------
 # Server entry point
 # ----------------------------------------------------------------------
