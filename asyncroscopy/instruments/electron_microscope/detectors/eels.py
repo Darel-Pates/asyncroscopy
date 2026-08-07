@@ -1,19 +1,35 @@
 """
-EEeLS (Electron Energy=Loss Spectroscopy) detector Tango device.
+EDS (Energy disperive X-ray spectroscopy) detector Tango device.
 
-Base class for EELS spectrometer.
-It does NOT talk to Gatan — the eels_gatan parent class 
+This device holds acquisition settings for the EDS detector.
+It does NOT talk to AutoScript directly — the STEMMicroscope device
 reads these attributes via DeviceProxy before acquiring.
 """
 
 from tango import AttrWriteType, DevState
-from tango.server import Device, attribute, command, DevVarFloatArray
-import tango.server
+from tango.server import Device, attribute
 
-class EELSBase(tango.server.Device):
-    """EELS base class for tango device."""
+class EELSBase(Device):
+    hardware_host = device_property(
+        dtype=str,
+        default_value="10.46.217.242",
+        doc="Hostname or IP of the Gatan server",
+    )
+    hardware_port = device_property(
+        dtype=int,
+        default_value=9092,
+        doc="Port of the AutoScript microscope server",
+    )
+
+    # ------------------------------------------------------------------
+    # Device properties — set per-deployment in the Tango DB
+    # ------------------------------------------------------------------
+
     
-    
+    # ------------------------------------------------------------------
+    # Attributes
+    # ------------------------------------------------------------------    
+        
     exposure_time = attribute(
             label="Dwell Time",
             dtype=float,
@@ -34,67 +50,30 @@ class EELSBase(tango.server.Device):
                 max_value=5,
                 doc="Number of Frames to be summed over for spectrum e.g.: 1 or 10",
             ) 
-    
+
+
+
+    # ------------------------------------------------------------------
+    # Initialisation
+    # ------------------------------------------------------------------
+
+
     def init_device(self) -> None:
         Device.init_device(self)
-        self.set_state(DevState.ON)
+        self.set_state(DevState.INIT)
 
-        # Sensible defaults — operators override via Tango DB or client writes
-        self._exposure_time: float = 1e-4   # 1 s
-        if not self._initialize_eels():
-            raise ValueError("Could not reach eels_server")
+         # Sensible defaults — operators override via Tango DB or client writes
+        self._exposure_time: float = 1e-4  # 1 s
+        self._number_of_frames: float = 1  # 1 frame
+
+        self._message_id: int = 1
+        self._last_status: str = "Uninitialised"
+
+        self._connect()
+
+    def _connect(self) -> None:
+        return self.set_state(DevState.ON)
         
-        self.info_stream("EELS device initialised")
-        
-    # ------------------------------------------------------------------
-    # Public commands
-    # ------------------------------------------------------------------
-    
-    @command(dtype_out=int)  
-    def _initialize_eels(self) -> None:
-        """ Initialize EELS mode and make sure eels server responds"""
-        return False
-
-    @command(dtype_in=DevVarFloatArray)
-    def set_eels_offset(self, offset):
-        """ Set the eels energy offset in eV"""
-        return self._set_eels_offset(offset)
-
-    @command(dtype_out=str)
-    def get_eels_spectrum(self):
-        """ Get eels spectrum filename as key for tile server"""
-        return self._get_eels_spectrum()
-
-    @command(dtype_out=str)
-    def get_available_dispersions(self):
-        """Get all available dispersions in eV/channel and their index""" 
-        return self._get_available_dispersions()
-
-    @command(dtype_out=DevVarFloatArray)
-    def get_eels_dispersion(self):
-        """Get current dispersion in eV/channel"""
-        return self._get_eels_dispersion()
-
-    @command(dtype_in=DevVarFloatArray)                
-    def set_eels_dispersion(self, dispersion_index):
-        """Get current dispersion in eV/channel"""
-        return self._set_eels_dispersion(dispersion_index)
-                    
-    @command(dtype_out=str)
-    def get_eels_aperture(self):
-        """Get current EELS entrance aperature as str and index"""
-        return self._get_eels_aperture()
-
-    @command(dtype_out=int)
-    def set_eels_aperture(self, aperture_index):
-        """Set EELS entrance aperature by its index"""
-        return self._set_eels_aperture(self, aperture_index)
-
-    @command(dtype_out=str)
-    def get_available_apertures(self):
-        """Get all available EELS entrance aperatures and their indices"""
-        return self._get_available_apertures()
-
     # ------------------------------------------------------------------
     # Attribute read / write
     # ------------------------------------------------------------------
@@ -105,30 +84,8 @@ class EELSBase(tango.server.Device):
     def write_exposure_time(self, value: float) -> None:
         self._exposure_time = value
 
-    # ------------------------------------------------------------------
-    # Private Functions
-    # ------------------------------------------------------------------
-
-    def _set_eels_offset(self, offset):
-        pass
+    def read_number_of_frames(self) -> float:
+            return self._number_of_frames
     
-    def _get_eels_spectrum(self):
-        pass    
-
-    def _get_available_dispersions(self):    
-        pass
-
-    def _get_eels_dispersion(self):
-        pass
-
-    def _set_eels_dispersion(self, dispersion_index):
-        pass
-
-    def _get_eels_aperture(self):
-        pass
-
-    def _set_eels_aperture(self, aperture_index):
-        pass
-
-    def _get_available_apertures(self):
-        pass
+    def write_number_of_frames(self, value: float) -> None:
+        self._number_of_frames = value
