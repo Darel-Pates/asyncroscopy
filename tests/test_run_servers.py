@@ -78,6 +78,27 @@ def test_build_devices_adds_selected_instrument():
     assert devices[-1].device_name == "asyncroscopy/instrument/default"
 
 
+def test_load_tilt_twin_config_includes_simulation_properties():
+    config = run_servers.load_config(
+        run_servers.PROJECT_DIR / "configs" / "digital_twin_tilt.yaml"
+    )
+    stage = next(device for device in config.support_devices if device.key == "stage")
+    properties = run_servers.instrument_properties(config)
+
+    assert config.instrument.class_name == "DigitalTwinTilt"
+    assert config.instrument.module_name.endswith("digital_twin_tilt")
+    assert stage.class_name == "TestStage"
+    assert properties["silicon_lattice_parameter_angstrom"] == ["5.431"]
+    assert properties["lattice_parameter_gradient_x_percent"] == ["2.0"]
+    assert properties["crystal_rotation_gradient_x_deg"] == ["4.0"]
+    assert properties["crystal_tilt_gradient_x_mrad"] == ["10.0"]
+    assert properties["potential_sampling_angstrom"] == ["0.08"]
+    assert properties["multislice_supercell_z"] == ["8"]
+    assert properties["rotation_center_z_nm"] == ["125"]
+    assert properties["randomness_scale"] == ["1.0"]
+    assert properties["stage_device_address"] == ["asyncroscopy/stage/default"]
+
+
 def test_load_mcp_config():
     config = run_mcp.load_config(run_mcp.PROJECT_DIR / "configs" / "mcp.yaml")
 

@@ -7,6 +7,8 @@ instrument:
 devices:
   eels:
     module_name: asyncroscopy.instruments.electron_microscope.detectors.eels_gatan
+    properties:
+      data_device_address: asyncroscopy/data/default
   data:
     module_name: asyncroscopy.data.data
   camera:
