@@ -322,16 +322,13 @@ class AutoScriptMicroscope(ElectronMicroscope):
         """
         Trigger AutoScript advanced scanned data acquisition with a camera detector.
 
-        AutoScript offloads the 4D scanned data storage for Ceta acquisitions, so
-        this command returns an acknowledgement and the settings used rather
-        than a local saved file path.
+        AutoScript offloads the 4D scanned data storage for Ceta acquisitions
         """
-        camera_detector = CameraType.BM_CETA if detector == "BM-Ceta" else detector
+        camera_detector = 'BM-Ceta'
         settings = StemDataSettings(dwell_time=dwell_time, detector_types=[camera_detector], size=imsize, region=Region(RegionCoordinateSystem.RELATIVE, Rectangle(*scan_region)))
-        adorned = self._microscope.acquisition.acquire_stem_data_advanced(settings)
+        self._microscope.acquisition.acquire_stem_data_advanced(settings)
         data_server = self._detector_proxies.get("data")
-        return save_acquisition(self, data_server, "stem_data", str(detector), adorned, dataset_name="stem_data")
-
+        
     # test: not sure this is how we want to save
     def _acquire_spectrum(self, detector_name: str, exposure_time: float) -> str:
         settings = EdsAcquisitionSettings()
