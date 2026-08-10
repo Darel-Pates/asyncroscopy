@@ -19,6 +19,7 @@ DATA/Tiled unique id for that saved acquisition.
 import json
 import math
 import time
+from pathlib import Path
 
 import numpy as np
 import tango
@@ -42,6 +43,8 @@ try:
     _AUTOSCRIPT_AVAILABLE = True
 except ImportError:
     _AUTOSCRIPT_AVAILABLE = False
+
+AUTOSCRIPT_STEM_OUTPUT_DIRECTORY = Path(r"Y:\AutoScript TEM")
 
 
 class AutoScriptMicroscope(ElectronMicroscope):
@@ -187,7 +190,7 @@ class AutoScriptMicroscope(ElectronMicroscope):
                 continue
             try:
                 proxy = tango.DeviceProxy(address)
-                proxy.set_timeout_millis(12_000)
+                proxy.set_timeout_millis(3_600_000 if name == "data" else 12_000)
                 self._detector_proxies[name] = proxy
                 self.info_stream(f"Connected to detector proxy: {name} @ {address}")
             except tango.DevFailed as e:
@@ -319,16 +322,34 @@ class AutoScriptMicroscope(ElectronMicroscope):
         )
 
     def _acquire_scanned_data_advanced(self, imsize: int, dwell_time: float, detector: str, scan_region: list[float]) -> str:
-        """
-        Trigger AutoScript advanced scanned data acquisition with a camera detector.
-
-        AutoScript offloads the 4D scanned data storage for Ceta acquisitions
-        """
-        camera_detector = 'BM-Ceta'
-        settings = StemDataSettings(dwell_time=dwell_time, detector_types=[camera_detector], size=imsize, region=Region(RegionCoordinateSystem.RELATIVE, Rectangle(*scan_region)))
-        self._microscope.acquisition.acquire_stem_data_advanced(settings)
+        """Acquire AutoScript 4D-STEM data and return its registered HDF5 key."""
         data_server = self._detector_proxies.get("data")
-        
+        if not AUTOSCRIPT_STEM_OUTPUT_DIRECTORY.is_dir():
+            raise FileNotFoundError(f"AutoScript STEM output directory is not readable: {AUTOSCRIPT_STEM_OUTPUT_DIRECTORY}")
+
+        files_before = set(AUTOSCRIPT_STEM_OUTPUT_DIRECTORY.glob("*.mrc"))
+        region = Region(RegionCoordinateSystem.RELATIVE, Rectangle(*scan_region))
+        settings = StemDataSettings(dwell_time=dwell_time, detector_types=[CameraType.BM_CETA], size=imsize, region=region)
+        self._microscope.acquisition.acquire_stem_data_advanced(settings)
+        for _ in range(11):
+            new_files = set(AUTOSCRIPT_STEM_OUTPUT_DIRECTORY.glob("*.mrc")) - files_before
+            if new_files:
+                break
+            time.sleep(0.5)
+
+        if len(new_files) != 1:
+            raise RuntimeError(f"Expected one new AutoScript MRC file, found {len(new_files)}")
+
+        source_path = new_files.pop()
+        request = {
+            "source_path": str(source_path),
+            "detector": detector,
+            "scan_shape": [int(imsize), int(imsize)],
+            "dwell_time": float(dwell_time),
+            "scan_region": list(scan_region),
+        }
+        return data_server.copy_and_register_remote_file(json.dumps(request))
+
     # test: not sure this is how we want to save
     def _acquire_spectrum(self, detector_name: str, exposure_time: float) -> str:
         settings = EdsAcquisitionSettings()
