@@ -1,0 +1,27 @@
+# Standalone segmentation stack. Install SAM2 before starting:
+#     uv sync --extra segment
+# Then run:
+#     uv run startup_scripts/run_servers.py --yaml configs/Segmentation.yaml
+
+devices:
+  data:
+    module_name: asyncroscopy.data.data
+  segment:
+    class_name: SEGMENTATION
+    module_name: asyncroscopy.mcp.segment
+    properties:
+      data_device_address: asyncroscopy/data/default
+
+tango:
+  host: localhost
+  port: 9094
+  reset_database_file: false
+
+tiled:
+  host: localhost
+  port: 9091
+  acquisition_dir: outputs/tiled_acquisitions
+  autostart: true
+  register_on_startup: false
+
+device_timeout_seconds: 120
