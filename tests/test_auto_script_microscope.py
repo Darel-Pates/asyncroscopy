@@ -1,3 +1,4 @@
+import json
 import types
 from pathlib import Path
 
@@ -18,11 +19,16 @@ from asyncroscopy.instruments.electron_microscope.auto_script import AutoScriptM
 
 class FakeDataServer:
     def __init__(self, save_path=None) -> None:
+        self.copy_requests = []
         if save_path is not None:
             self.save_path = str(save_path)
 
     def register_path(self, path: str) -> str:
         return path
+
+    def copy_and_register_remote_file(self, request_json: str) -> str:
+        self.copy_requests.append(json.loads(request_json))
+        return "registered-stem-data.h5"
 
 
 class TestAutoScriptMicroscope:
@@ -184,40 +190,36 @@ class TestAutoScriptMicroscope:
             }
         ]
 
-    def test_scanned_data_advanced_helper_saves_and_registers_ceta_with_relative_region(self, monkeypatch, tmp_path) -> None:
-        class FakeImage:
-            data = np.array([[5, 6], [7, 8]], dtype=np.uint16)
-
+    def test_scanned_data_advanced_discovers_mrc_and_waits_for_registration(self, monkeypatch, tmp_path) -> None:
         class FakeAcquisition:
             def __init__(self) -> None:
                 self.settings = None
 
             def acquire_stem_data_advanced(self, settings):
                 self.settings = settings
-                return FakeImage()
 
         acquisition = FakeAcquisition()
+        data_server = FakeDataServer()
         microscope = AutoScriptMicroscope.__new__(AutoScriptMicroscope)
         microscope._microscope = types.SimpleNamespace(acquisition=acquisition)
-        microscope._detector_proxies = {"data": FakeDataServer()}
+        microscope._detector_proxies = {"data": data_server}
+        monkeypatch.setattr("asyncroscopy.instruments.electron_microscope.auto_script.AUTOSCRIPT_STEM_OUTPUT_DIRECTORY", tmp_path)
+        monkeypatch.setattr("asyncroscopy.instruments.electron_microscope.auto_script.time.sleep", lambda _: (tmp_path / "new_scan.mrc").write_bytes(b"complete-mrc"))
+        (tmp_path / "existing.mrc").write_bytes(b"old-mrc")
 
-        def fake_new_path(device, acquisition_type: str, detector: str, data_server=None, extension="h5"):
-            return tmp_path / f"{acquisition_type}_{detector}.h5"
-
-        monkeypatch.setattr("asyncroscopy.data.data_writer.acquisition_filename", fake_new_path)
-
-        result = AutoScriptMicroscope._acquire_scanned_data_advanced(
-            microscope,
-            imsize=128,
-            dwell_time=10e-3,
-            detector="BM-Ceta",
-            scan_region=[0.25, 0.25, 0.5, 0.5],
-        )
+        result = AutoScriptMicroscope._acquire_scanned_data_advanced(microscope, imsize=128, dwell_time=10e-3, detector="BM-Ceta", scan_region=[0.25, 0.25, 0.5, 0.5])
 
         settings = acquisition.settings
-        with h5py.File(result, "r") as h5:
-            assert h5["stem_data"][()].tolist() == [[5, 6], [7, 8]]
-            assert h5["stem_data"].attrs["detector"] == "BM-Ceta"
+        assert result == "registered-stem-data.h5"
+        assert data_server.copy_requests == [
+            {
+                "source_path": str(tmp_path / "new_scan.mrc"),
+                "detector": "BM-Ceta",
+                "scan_shape": [128, 128],
+                "dwell_time": 10e-3,
+                "scan_region": [0.25, 0.25, 0.5, 0.5],
+            }
+        ]
         assert settings.size == 128
         assert settings.dwell_time == pytest.approx(10e-3)
         assert settings.detector_types == [CameraType.BM_CETA]
