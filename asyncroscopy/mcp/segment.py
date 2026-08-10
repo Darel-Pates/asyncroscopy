@@ -1,72 +1,217 @@
-"""Tango device using SAM2 model to segment images into regions of interest."""
+"""Tango device using SAM2 to segment DATA/Tiled image acquisitions."""
+
+from __future__ import annotations
 
 import json
-import numpy as np
-import cv2
-import torch
-from scipy import ndimage
-from PIL import Image
+from typing import Any, TypedDict, cast
 
+import numpy as np
 import tango
+from scipy import ndimage
 from tango import AttrWriteType, DevState
 from tango.server import Device, attribute, command, device_property
+from tiled.client import from_uri
+
+from asyncroscopy.data.data_writer import save_acquisition
 
 try:
-    from sam2.build_sam import build_sam2_hf
+    import torch
     from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
-except ImportError:
-    print("SAM 2 not installed. Run: pip install git+https://github.com/facebookresearch/sam2.git")
+    from sam2.build_sam import build_sam2_hf
+except ImportError as exc:
+    torch = None
+    SAM2AutomaticMaskGenerator = None
+    build_sam2_hf = None
+    _SAM2_IMPORT_ERROR: ImportError | None = exc
+else:
+    _SAM2_IMPORT_ERROR = None
+
+
+class SAM2Mask(TypedDict):
+    """SAM2 fields used by the segmentation device."""
+
+    segmentation: np.ndarray
+    area: int
+    predicted_iou: float
+
+
+class AreaStatistic(TypedDict):
+    """JSON-serializable statistics for one segmented region."""
+
+    id: int
+    area_px: int
+    equiv_diameter_px: float
+    circularity: float
+    confidence: float
+
+
+def _read_first_array(node: Any) -> np.ndarray:
+    """Read the first array below a Tiled node in deterministic key order."""
+    read = getattr(node, "read", None)
+    if callable(read):
+        return np.asarray(read())
+
+    keys = getattr(node, "keys", None)
+    if callable(keys):
+        child_names = sorted(str(name) for name in keys())
+        for child_name in child_names:
+            try:
+                return _read_first_array(node[child_name])
+            except ValueError:
+                continue
+
+    raise ValueError("The DATA/Tiled key does not contain a readable array")
+
+
+def _prepare_image(image: np.ndarray) -> np.ndarray:
+    """Normalize a two-dimensional image and expand it to RGB for SAM2."""
+    gray = np.squeeze(np.asarray(image)).astype(np.float32)
+    if gray.ndim == 3 and gray.shape[-1] in {3, 4}:
+        gray = np.mean(gray[..., :3], axis=-1)
+    if gray.ndim != 2:
+        raise ValueError(
+            f"Segmentation requires a 2-D grayscale or RGB image; received shape {gray.shape}"
+        )
+
+    finite = np.isfinite(gray)
+    if not np.any(finite):
+        raise ValueError("Segmentation input contains no finite values")
+
+    lo, hi = np.percentile(gray[finite], [0.5, 99.5])
+    normalized = np.clip((gray - lo) / (hi - lo + 1e-8), 0, 1)
+    normalized = np.nan_to_num(normalized, nan=0.0, posinf=1.0, neginf=0.0)
+    gray_8bit = (normalized * 255).astype(np.uint8)
+    return np.repeat(gray_8bit[..., np.newaxis], 3, axis=-1)
+
+
+def _label_areas(areas: list[SAM2Mask], shape: tuple[int, int]) -> np.ndarray:
+    """Convert overlapping SAM2 masks into one integer-labeled image."""
+    labels = np.zeros(shape, dtype=np.uint32)
+    for label, area in enumerate(areas, start=1):
+        mask = np.asarray(area["segmentation"], dtype=bool)
+        if mask.shape != shape:
+            raise ValueError(
+                f"SAM2 returned mask shape {mask.shape}; expected image shape {shape}"
+            )
+        # Areas are ordered largest to smallest, so more-specific small masks win
+        # when SAM2 returns overlapping regions.
+        labels[mask] = label
+    return labels
 
 
 class SEGMENTATION(Device):
-    model_size = device_property(dtype=str, default_value="facebook/sam2-hiera-large", doc="HuggingFace model ID for SAM 2")
-    points_per_side = attribute(dtype=int, access=AttrWriteType.READ_WRITE, doc="Number of points SAM samples along each edge of the image.")
-    iou_threshold = attribute(dtype=float, access=AttrWriteType.READ_WRITE, doc="IoU threshold for mask merging")
-    stability_thresh = attribute(dtype=float, access=AttrWriteType.READ_WRITE, doc="Stability threshold for mask filtering")
-    min_area_px = attribute(dtype=int, access=AttrWriteType.READ_WRITE, doc="Minimum area in pixels for valid masks")
-    n_areas = attribute(dtype=int, access=AttrWriteType.READ, doc="Number of segmented areas")
-    centroids = attribute(dtype=str, access=AttrWriteType.READ, doc="Centroids of segmented areas")
+    """Segment DATA/Tiled image keys with SAM2 and save integer label images."""
+
+    model_size = device_property(
+        dtype=str,
+        default_value="facebook/sam2-hiera-large",
+        doc="HuggingFace model ID for SAM2",
+    )
+    data_device_address = device_property(
+        dtype=str,
+        default_value="asyncroscopy/data/default",
+        doc="Tango DATA device used to read input keys and save segmentation labels",
+    )
+
+    points_per_side = attribute(
+        dtype=int,
+        access=AttrWriteType.READ_WRITE,
+        doc="Number of points SAM samples along each image edge",
+    )
+    iou_threshold = attribute(
+        dtype=float,
+        access=AttrWriteType.READ_WRITE,
+        doc="IoU threshold for mask merging",
+    )
+    stability_thresh = attribute(
+        dtype=float,
+        access=AttrWriteType.READ_WRITE,
+        doc="Stability threshold for mask filtering",
+    )
+    min_area_px = attribute(
+        dtype=int,
+        access=AttrWriteType.READ_WRITE,
+        doc="Minimum area in pixels for valid masks",
+    )
+    n_areas = attribute(
+        dtype=int,
+        access=AttrWriteType.READ,
+        doc="Number of segmented areas",
+    )
+    centroids = attribute(
+        dtype=str,
+        access=AttrWriteType.READ,
+        doc="JSON-encoded centroids of segmented areas",
+    )
 
     def init_device(self) -> None:
-        """Initialize the SAM 2 segmentation device, set SAM 2 parameters and segmentation statistics."""
+        """Initialize SAM2 parameters, model, and segmentation statistics."""
         Device.init_device(self)
-        self._device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.set_state(tango.DevState.INIT)
+        self.set_state(DevState.INIT)
         self._points_per_side = 48
         self._iou_threshold = 0.57
         self._stability_thresh = 0.75
         self._min_area_px = 200
         self._crop_n_layers = 1
-
         self._n_areas = 0
-        self._centroids = []
-        self._area_stats = []
+        self._centroids: list[list[float]] = []
+        self._area_stats: list[AreaStatistic] = []
+        self._data_proxy = None
+        self._sam2 = None
+
+        if _SAM2_IMPORT_ERROR is not None:
+            message = (
+                "SAM2 dependencies are not installed. "
+                "Run `uv sync --extra segment` before starting this server. "
+                f"Import error: {_SAM2_IMPORT_ERROR}"
+            )
+            self.set_state(DevState.FAULT)
+            self.set_status(message)
+            self.error_stream(message)
+            return
 
         try:
-            self._sam2 = build_sam2_hf(self.model_size, device=self._device)
-            self.set_state(tango.DevState.ON)
-            self.info_stream("Segmentation device initialized")
-        except Exception as e:
-            self.set_state(tango.DevState.FAULT)
-            self.set_status(f"Initialization failed: {e}")
+            device = "cuda" if torch is not None and torch.cuda.is_available() else "cpu"
+            assert build_sam2_hf is not None
+            self._sam2 = build_sam2_hf(self.model_size, device=device)
+            self.set_state(DevState.ON)
+            self.info_stream(f"Segmentation device initialized on {device}")
+        except Exception as exc:
+            self.set_state(DevState.FAULT)
+            self.set_status(f"Initialization failed: {exc}")
 
-    def _prepare_image(self, image: np.ndarray) -> np.ndarray:
-        """Prepare the image for segmentation by converting to RGB and enhancing."""
-        gray = image.astype(np.float32)
-        if gray.ndim == 3:
-            gray = np.mean(gray, axis=-1)
-        lo, hi = np.percentile(gray, [0.5, 99.5])
-        gray = np.clip((gray - lo) / (hi - lo + 1e-8), 0, 1)
+    def _get_data_proxy(self):
+        """Return the configured DATA proxy, retrying startup-time failures."""
+        if self._data_proxy is None:
+            if not self.data_device_address:
+                raise RuntimeError("No DATA device is configured for segmentation")
+            self._data_proxy = tango.DeviceProxy(self.data_device_address)
+            self._data_proxy.set_timeout_millis(120_000)
+        return self._data_proxy
 
-        gray_8bit = (gray * 255).astype(np.uint8)
-        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-        enhanced = clahe.apply(gray_8bit)
+    def _load_image_from_key(self, key: str, data_proxy: Any) -> np.ndarray:
+        """Resolve a DATA/Tiled key and read its first array dataset."""
+        config = json.loads(data_proxy.get_config())
+        uri = config.get("uri")
+        if not uri:
+            raise RuntimeError(
+                f"DATA device {self.data_device_address!r} did not provide a Tiled URI"
+            )
 
-        image = np.stack([enhanced] * 3, axis=-1)
-        return image
+        client = from_uri(uri)
+        try:
+            node = client[key]
+        except KeyError as exc:
+            raise FileNotFoundError(
+                f"Could not resolve data key {key!r} from Tiled server {uri!r}"
+            ) from exc
+        return _read_first_array(node)
 
-    def segment_image(self, image: np.ndarray) -> list:
-        """Segment the image with SAM 2 and return a list of masks."""
+    def segment_image(self, image: np.ndarray) -> list[SAM2Mask]:
+        """Segment an RGB image with SAM2 and return filtered masks."""
+        if self._sam2 is None or SAM2AutomaticMaskGenerator is None:
+            raise RuntimeError("SAM2 model is not initialized")
+
         mask_generator = SAM2AutomaticMaskGenerator(
             model=self._sam2,
             points_per_side=self._points_per_side,
@@ -75,46 +220,50 @@ class SEGMENTATION(Device):
             min_mask_region_area=self._min_area_px,
             crop_n_layers=self._crop_n_layers,
         )
-        masks = mask_generator.generate(image)
-        masks = sorted(masks, key=lambda x: x["area"], reverse=True)
+        masks = cast(list[SAM2Mask], mask_generator.generate(image))
+        masks.sort(key=lambda mask: mask["area"], reverse=True)
         total_pixels = image.shape[0] * image.shape[1]
+        return [
+            mask
+            for mask in masks
+            if self._min_area_px < mask["area"] < total_pixels * 0.5
+        ]
 
-        areas = [m for m in masks if m["area"] < total_pixels * 0.5]
-        areas = [m for m in areas if m["area"] > self._min_area_px]
+    def area_statistics(
+        self, areas: list[SAM2Mask]
+    ) -> tuple[list[AreaStatistic], list[list[float]]]:
+        """Compute JSON-serializable statistics for segmented areas."""
+        area_stats: list[AreaStatistic] = []
+        centroids: list[list[float]] = []
 
-        return areas
+        for area_id, area in enumerate(areas, start=1):
+            mask = np.asarray(area["segmentation"], dtype=bool)
+            area_px = int(area["area"])
+            cy, cx = ndimage.center_of_mass(mask)
+            equiv_diameter = float(2 * np.sqrt(area_px / np.pi))
+            eroded = ndimage.binary_erosion(mask)
+            perimeter = int(np.sum(mask & ~eroded))
+            circularity = (
+                min(float((4 * np.pi * area_px) / (perimeter**2)), 1.0)
+                if perimeter > 0
+                else 0.0
+            )
 
-    def area_statistics(self, areas: list) -> list:
-        """Compute statistics of segmented areas."""
-        area_stats = []
-        centroids = []
-
-        for i, area in enumerate(areas):
-            m = area["segmentation"]
-            area_px = area["area"]
-            cy, cx = ndimage.center_of_mass(m)
-            equiv_d = 2 * np.sqrt(area_px / np.pi)
-            eroded = ndimage.binary_erosion(m)
-            perimeter = np.sum(m & ~eroded)
-            circularity = min((4 * np.pi * area_px) / (perimeter**2), 1.0) if perimeter > 0 else 0
-
-            area_stats.append({
-                "id": i,
-                "area_px": area_px,
-                "equiv_diameter_px": equiv_d,
-                "circularity": circularity,
-                "confidence": area["predicted_iou"],
-            })
+            area_stats.append(
+                {
+                    "id": area_id,
+                    "area_px": area_px,
+                    "equiv_diameter_px": equiv_diameter,
+                    "circularity": circularity,
+                    "confidence": float(area["predicted_iou"]),
+                }
+            )
             centroids.append([float(cx), float(cy)])
 
         self._n_areas = len(areas)
         self._centroids = centroids
         self._area_stats = area_stats
         return area_stats, centroids
-
-    # ------------------------------------------------------------------
-    # Attribute read / write
-    # ------------------------------------------------------------------
 
     def read_iou_threshold(self) -> float:
         return self._iou_threshold
@@ -148,45 +297,45 @@ class SEGMENTATION(Device):
 
     @attribute(dtype=str, doc="Statistics of segmented areas")
     def area_stats(self) -> str:
-        """Return the statistics of segmented areas as a JSON string."""
+        """Return the statistics of segmented areas as JSON."""
         return json.dumps(self._area_stats)
 
-    # ------------------------------------------------------------------
-    # Commands
-    # ------------------------------------------------------------------
-
     @command(dtype_in=str, dtype_out=str)
-    def segment(self, image_path: str) -> str:
-        """Segment areas in microscope images using SAM 2.
-        
-        Input: file path to user image (png, tif, emd, etc.
-        Output: JSON list of area statistics including id, area in pixels,
-        equivalent diameter, circularity, and confidence score.
-        This also updates n_areas, centroids, and area_stats attributes."""
-        
+    def segment(self, data_key: str) -> str:
+        """Segment a DATA/Tiled image key and return a label-image DATA key."""
         try:
-            image_data = np.array(Image.open(image_path))
-            prepared = self._prepare_image(image_data)
+            data_proxy = self._get_data_proxy()
+            image_data = self._load_image_from_key(data_key, data_proxy)
+            prepared = _prepare_image(image_data)
             areas = self.segment_image(prepared)
-            area_stats, centroids = self.area_statistics(areas)
-            return json.dumps(area_stats)
-        except Exception as e:
-            self.error_stream(f"Failed to segment: {e}")
-            return json.dumps({"error": str(e)})
+            area_stats, _ = self.area_statistics(areas)
+            labels = _label_areas(areas, prepared.shape[:2])
+            return save_acquisition(
+                self,
+                data_proxy,
+                acquisition_type="segmentation",
+                detectors="sam2",
+                data=labels,
+                dataset_name="labels",
+                dataset_attrs={
+                    "source_data_key": data_key,
+                    "model": self.model_size,
+                    "area_statistics": area_stats,
+                },
+                file_attrs={"source_data_key": data_key},
+            )
+        except Exception as exc:
+            message = f"Failed to segment DATA key {data_key!r}: {exc}"
+            self.error_stream(message)
+            raise RuntimeError(message) from exc
 
     @command(dtype_in=int, dtype_out=str)
     def get_centroid(self, area_id: int) -> str:
-        """Return the centroid of a specific area as a JSON string."""
-        try:
-            return json.dumps(self._centroids[area_id])
-        except IndexError:
-            self.error_stream(f"Area ID {area_id} does not exist.")
-            return json.dumps({"error": "Area ID does not exist."})
+        """Return the centroid of a one-based segmented area ID as JSON."""
+        if area_id < 1 or area_id > len(self._centroids):
+            raise ValueError(f"Area ID {area_id} does not exist")
+        return json.dumps(self._centroids[area_id - 1])
 
-
-# ----------------------------------------------------------------------
-# Server entry point
-# ----------------------------------------------------------------------
 
 if __name__ == "__main__":
     SEGMENTATION.run_server()
