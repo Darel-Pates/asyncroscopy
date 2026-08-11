@@ -22,6 +22,7 @@ from asyncroscopy.instruments.electron_microscope.detectors.camera import CAMERA
 from asyncroscopy.instruments.electron_microscope.detectors.eds import EDS
 from asyncroscopy.instruments.electron_microscope.hardware.scan import SCAN
 from asyncroscopy.instruments.electron_microscope.hardware.TestStage import TestStage
+from asyncroscopy.instruments.electron_microscope.hardware.corrector_digital_twin import DigitalTwinCorrector
 from asyncroscopy.instruments.electron_microscope.digital_twin import DigitalTwin
 from asyncroscopy.instruments.electron_microscope.digital_twin_tilt import DigitalTwinTilt
 from asyncroscopy.instruments.electron_microscope.auto_script import AutoScriptMicroscope
@@ -92,6 +93,15 @@ def tango_ctx(data_save_dir):
             ],
         },
         {
+            "class": DigitalTwinCorrector,
+            "devices": [
+                {
+                    "name": "asyncroscopy/corrector/default",
+                    "properties": {"measurement_noise_fraction": 0.0},
+                }
+            ],
+        },
+        {
             "class": DATA,
             "devices": [
                 {
@@ -109,6 +119,7 @@ def tango_ctx(data_save_dir):
                         "scan_device_address": "asyncroscopy/scan/default",
                         "eds_device_address": "asyncroscopy/eds/default",
                         "stage_device_address": "asyncroscopy/stage/default",
+                        "corrector_device_address": "asyncroscopy/corrector/default",
                         "camera_device_address": "asyncroscopy/camera/default",
                         "acquisition_save_directory": str(data_save_dir),
                     },
@@ -190,6 +201,13 @@ def camera_proxy(tango_ctx):
 @pytest.fixture(scope="session")
 def stage_proxy(tango_ctx):
     return tango.DeviceProxy(tango_ctx.get_device_access("asyncroscopy/stage/default"))
+
+
+@pytest.fixture(scope="session")
+def corrector_proxy(tango_ctx):
+    return tango.DeviceProxy(
+        tango_ctx.get_device_access("asyncroscopy/corrector/default")
+    )
 
 
 @pytest.fixture(scope="session")

@@ -25,6 +25,12 @@ Start the MCP server in a second terminal for agent/AI integration:
 uv run startup_scripts/run_mcp.py --yaml configs/mcp.yaml
 ```
 
+Start only the segmentation Tango device against an existing Tango/DATA/Tiled stack:
+```bash
+uv sync --extra segment
+uv run startup_scripts/run_segmentation.py --yaml configs/Segmentation.yaml
+```
+
 For interactive GUI-based startup:
 ```bash
 uv run startup_guis/server_gui.py
