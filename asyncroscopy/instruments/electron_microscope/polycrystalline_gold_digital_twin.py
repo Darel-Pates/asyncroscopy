@@ -178,8 +178,8 @@ def generate_polycrystalline_gold_slab(
 class PolycrystallineGoldDigitalTwin(DigitalTwin):
     """Voxel-slab HAADF twin whose probe is supplied by a corrector device."""
 
-    volume_size_xy_nm = device_property(dtype=float, default_value=80.0)
-    volume_thickness_nm = device_property(dtype=float, default_value=24.0)
+    volume_size_xy_nm = device_property(dtype=float, default_value=200.0)
+    volume_thickness_nm = device_property(dtype=float, default_value=20.0)
     voxel_size_nm = device_property(dtype=float, default_value=0.5)
     region_count = device_property(dtype=int, default_value=18)
     empty_region_fraction = device_property(dtype=float, default_value=0.22)

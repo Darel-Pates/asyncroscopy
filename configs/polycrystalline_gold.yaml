@@ -5,8 +5,8 @@ instrument:
   timeout_seconds: 120
   properties:
     sample_seed: 20260811
-    volume_size_xy_nm: 80
-    volume_thickness_nm: 24
+    volume_size_xy_nm: 200
+    volume_thickness_nm: 20
     voxel_size_nm: 0.5
     region_count: 18
     empty_region_fraction: 0.22
