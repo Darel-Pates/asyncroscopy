@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any, TypedDict, cast
+from uuid import uuid4
 
 import numpy as np
 import tango
@@ -11,8 +13,6 @@ from scipy import ndimage
 from tango import AttrWriteType, DevState
 from tango.server import Device, attribute, command, device_property
 from tiled.client import from_uri
-
-from asyncroscopy.data.data_writer import save_acquisition
 
 try:
     import torch
@@ -348,20 +348,23 @@ class SEGMENTATION(Device):
             areas = self.segment_image(prepared)
             area_stats, _ = self.area_statistics(areas)
             labels = _label_areas(areas, prepared.shape[:2])
-            return save_acquisition(
-                self,
-                data_proxy,
-                acquisition_type="segmentation",
-                detectors="sam2",
-                data=labels,
-                dataset_name="labels",
-                dataset_attrs={
+            key = f"segmentation_{uuid4().hex}"
+            tiled = from_uri(
+                json.loads(data_proxy.get_config())["uri"],
+                api_key=os.environ.get("ASYNCROSCOPY_TILED_API_KEY", "secret"),
+            )
+            tiled.write_array(
+                labels,
+                key=key,
+                metadata={
+                    "acquisition_type": "segmentation",
+                    "detector": "sam2",
                     "source_data_key": data_key,
                     "model": self.model_size,
                     "area_statistics": area_stats,
                 },
-                file_attrs={"source_data_key": data_key},
             )
+            return key
         except Exception as exc:
             message = f"Failed to segment DATA key {data_key!r}: {exc}"
             self.error_stream(message)
