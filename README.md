@@ -30,6 +30,12 @@ Start only the segmentation Tango device against an existing Tango/DATA/Tiled st
 uv run --extra segment startup_scripts/run_segmentation.py --yaml configs/Segmentation.yaml
 ```
 
+Start the oriented-particle digital twin:
+
+```bash
+uv run --extra diffraction python startup_scripts/run_servers.py --yaml configs/digital_twin_particles.yaml
+```
+
 `configs/Segmentation.yaml` sets `compute_device: cuda`. On Linux and Windows,
 the `segment` extra installs PyTorch from its CUDA 13.0 package index; macOS
 continues to use the normal PyPI build. The launcher fails at startup instead
