@@ -17,12 +17,22 @@ class FakeDatabase:
         self.properties = (name, properties)
 
 
-def test_load_config() -> None:
-    config = run_segmentation.load_config(
-        run_segmentation.PROJECT_DIR / "configs" / "Segmentation.yaml"
+def test_load_config(tmp_path: Path) -> None:
+    config_path = tmp_path / "segmentation.yaml"
+    config_path.write_text(
+        """tango:
+  host: gpu-host
+  port: 9094
+data_device_address: asyncroscopy/data/default
+model_size: facebook/sam2-hiera-large
+compute_device: cuda
+device_timeout_seconds: 120
+""",
+        encoding="utf-8",
     )
+    config = run_segmentation.load_config(config_path)
 
-    assert config.tango == run_segmentation.TangoConfig("localhost", 9094)
+    assert config.tango == run_segmentation.TangoConfig("gpu-host", 9094)
     assert config.data_device_address == "asyncroscopy/data/default"
     assert config.model_size == "facebook/sam2-hiera-large"
     assert config.compute_device == "cuda"

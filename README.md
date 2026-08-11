@@ -30,11 +30,14 @@ Start only the segmentation Tango device against an existing Tango/DATA/Tiled st
 uv run --extra segment startup_scripts/run_segmentation.py --yaml configs/Segmentation.yaml
 ```
 
-`configs/Segmentation.yaml` sets `compute_device: cuda`, so this launcher fails at
-startup instead of silently using the CPU when CUDA is unavailable. Verify the
-PyTorch installation on the GPU host before launching:
+`configs/Segmentation.yaml` sets `compute_device: cuda`. On Linux and Windows,
+the `segment` extra installs PyTorch from its CUDA 13.0 package index; macOS
+continues to use the normal PyPI build. The launcher fails at startup instead
+of silently using the CPU when CUDA is unavailable. Install and verify on the
+GPU host before launching:
 
 ```bash
+uv sync --extra segment --reinstall-package torch --reinstall-package torchvision
 uv run --extra segment python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available(), torch.cuda.get_device_name() if torch.cuda.is_available() else '')"
 ```
 
