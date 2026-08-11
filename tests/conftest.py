@@ -321,7 +321,6 @@ def patched_camera_path_acquisition(monkeypatch: pytest.MonkeyPatch, tmp_path):
         detector: str,
         readout_area: str,
         frame_combining: int = 1,
-        electron_counting: bool = True,
         output_format: str = ".h5",
     ):
         calls.append(
@@ -331,7 +330,6 @@ def patched_camera_path_acquisition(monkeypatch: pytest.MonkeyPatch, tmp_path):
                 "detector": detector,
                 "readout_area": readout_area,
                 "frame_combining": frame_combining,
-                "electron_counting": electron_counting,
                 "output_format": output_format,
             }
         )

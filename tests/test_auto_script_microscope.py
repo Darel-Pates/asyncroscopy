@@ -242,7 +242,6 @@ class TestAutoScriptMicroscope:
         camera_proxy.readout_area = "Half"
         camera_proxy.camera_detector = "BM-Ceta"
         camera_proxy.frame_combining = 6
-        camera_proxy.electron_counting = False
         camera_proxy.output_format = ".h5"
 
         saved_path = auto_script_proxy.acquire_camera_image()
@@ -255,7 +254,6 @@ class TestAutoScriptMicroscope:
                 "detector": "BM-Ceta",
                 "readout_area": "Half",
                 "frame_combining": 6,
-                "electron_counting": False,
                 "output_format": ".h5",
             }
         ]
@@ -295,7 +293,6 @@ class TestAutoScriptMicroscope:
             detector="BM-Ceta",
             readout_area="Half",
             frame_combining=6,
-            electron_counting=False,
         )
 
         settings = acquisition.settings
@@ -304,7 +301,6 @@ class TestAutoScriptMicroscope:
         assert settings.exposure_time == pytest.approx(0.5)
         assert settings.fixed_readout_area == FixedReadoutArea.HALF
         assert settings.frame_combining == 6
-        assert settings.electron_counting is False
         with h5py.File(result, "r") as h5:
             assert h5["image"][()].tolist() == [[9, 8], [7, 6]]
             assert h5["image"].attrs["acquisition_type"] == "camera_image"
@@ -346,7 +342,6 @@ class TestAutoScriptMicroscope:
         camera_proxy.imsize = 1024
         camera_proxy.readout_area = "Full"
         camera_proxy.frame_combining = 1
-        camera_proxy.electron_counting = True
         camera_proxy.output_format = ".h5"
 
         saved_path = auto_script_proxy.acquire_camera_image()
@@ -359,7 +354,6 @@ class TestAutoScriptMicroscope:
                 "detector": "Flucam",
                 "readout_area": "Full",
                 "frame_combining": 1,
-                "electron_counting": True,
                 "output_format": ".h5",
             }
         ]
