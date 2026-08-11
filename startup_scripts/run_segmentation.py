@@ -108,9 +108,7 @@ def main(argv: list[str] | None = None) -> int:
                 key="segmentation",
                 label="Segmentation Server",
                 command=[
-                    "uv",
-                    "run",
-                    "python",
+                    sys.executable,
                     "-m",
                     "asyncroscopy.mcp.segment",
                     INSTANCE_NAME,

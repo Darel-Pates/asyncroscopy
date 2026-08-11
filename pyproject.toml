@@ -68,6 +68,7 @@ ollama = [
 # Install SAM2 segmentation support with:
 #     uv sync --extra segment
 segment = [
+    "huggingface-hub",
     "sam-2 @ git+https://github.com/facebookresearch/sam2.git",
 ]
 
