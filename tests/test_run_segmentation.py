@@ -25,6 +25,7 @@ def test_load_config() -> None:
     assert config.tango == run_segmentation.TangoConfig("localhost", 9094)
     assert config.data_device_address == "asyncroscopy/data/default"
     assert config.model_size == "facebook/sam2-hiera-large"
+    assert config.compute_device == "cuda"
 
 
 def test_register_device(monkeypatch) -> None:
@@ -53,6 +54,7 @@ def test_register_device(monkeypatch) -> None:
         {
             "data_device_address": ["asyncroscopy/data/default"],
             "model_size": ["facebook/sam2-hiera-large"],
+            "compute_device": ["auto"],
         },
     )
 

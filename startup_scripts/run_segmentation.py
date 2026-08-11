@@ -36,6 +36,7 @@ class SegmentationConfig:
     tango: TangoConfig
     data_device_address: str = "asyncroscopy/data/default"
     model_size: str = "facebook/sam2-hiera-large"
+    compute_device: str = "auto"
     device_timeout_seconds: int = 120
 
 
@@ -57,6 +58,7 @@ def load_config(path: Path) -> SegmentationConfig:
             raw.get("data_device_address", "asyncroscopy/data/default")
         ),
         model_size=str(raw.get("model_size", "facebook/sam2-hiera-large")),
+        compute_device=str(raw.get("compute_device", "auto")),
         device_timeout_seconds=int(raw.get("device_timeout_seconds", 120)),
     )
 
@@ -79,6 +81,7 @@ def register_device(config: SegmentationConfig) -> None:
         {
             "data_device_address": [config.data_device_address],
             "model_size": [config.model_size],
+            "compute_device": [config.compute_device],
         },
     )
 

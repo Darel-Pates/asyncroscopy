@@ -112,6 +112,11 @@ class SEGMENTATION(Device):
         default_value="asyncroscopy/data/default",
         doc="Tango DATA device used to read input keys and save segmentation labels",
     )
+    compute_device = device_property(
+        dtype=str,
+        default_value="auto",
+        doc="PyTorch compute device: 'auto', 'cpu', 'cuda', or a CUDA index such as 'cuda:1'",
+    )
 
     points_per_side = attribute(
         dtype=int,
@@ -158,6 +163,7 @@ class SEGMENTATION(Device):
         self._area_stats: list[AreaStatistic] = []
         self._data_proxy = None
         self._sam2 = None
+        self._active_compute_device = "unavailable"
 
         if _SAM2_IMPORT_ERROR is not None:
             message = (
@@ -171,11 +177,37 @@ class SEGMENTATION(Device):
             return
 
         try:
-            device = "cuda" if torch is not None and torch.cuda.is_available() else "cpu"
+            assert torch is not None
+            requested_device = self.compute_device.strip().lower()
+            if requested_device == "auto":
+                requested_device = "cuda" if torch.cuda.is_available() else "cpu"
+
+            device = torch.device(requested_device)
+            if device.type not in {"cpu", "cuda"}:
+                raise ValueError(
+                    f"Unsupported compute_device {self.compute_device!r}; "
+                    "expected 'auto', 'cpu', 'cuda', or 'cuda:<index>'"
+                )
+            if device.type == "cuda" and not torch.cuda.is_available():
+                raise RuntimeError(
+                    f"compute_device is {self.compute_device!r}, but CUDA is unavailable "
+                    f"in PyTorch {torch.__version__} (torch.version.cuda={torch.version.cuda!r}). "
+                    "Install a CUDA-enabled PyTorch build on this machine."
+                )
+
+            self._active_compute_device = str(device)
             assert build_sam2_hf is not None
-            self._sam2 = build_sam2_hf(self.model_size, device=device)
+            self._sam2 = build_sam2_hf(self.model_size, device=self._active_compute_device)
             self.set_state(DevState.ON)
-            self.info_stream(f"Segmentation device initialized on {device}")
+            accelerator = (
+                torch.cuda.get_device_name(device) if device.type == "cuda" else "CPU"
+            )
+            message = (
+                f"Segmentation device initialized on {self._active_compute_device} "
+                f"({accelerator})"
+            )
+            self.set_status(message)
+            self.info_stream(message)
         except Exception as exc:
             self.set_state(DevState.FAULT)
             self.set_status(f"Initialization failed: {exc}")
@@ -220,7 +252,13 @@ class SEGMENTATION(Device):
             min_mask_region_area=self._min_area_px,
             crop_n_layers=self._crop_n_layers,
         )
-        masks = cast(list[SAM2Mask], mask_generator.generate(image))
+        assert torch is not None
+        with torch.inference_mode():
+            if self._active_compute_device.startswith("cuda"):
+                with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                    masks = cast(list[SAM2Mask], mask_generator.generate(image))
+            else:
+                masks = cast(list[SAM2Mask], mask_generator.generate(image))
         masks.sort(key=lambda mask: mask["area"], reverse=True)
         total_pixels = image.shape[0] * image.shape[1]
         return [
